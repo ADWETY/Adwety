@@ -1,0 +1,12 @@
+# Flutter and Dart generated
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+build/
+android/.kotlin/
+
+# IDE
+.idea/
+.vscode/

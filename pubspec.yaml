@@ -1,0 +1,35 @@
+name: adweth_ui
+description: ADWETH healthcare mobile UI generated from Figma.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_screenutil: ^5.9.3
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.1.0
+  cached_network_image: ^3.4.1
+  go_router: ^14.6.2
+  flutter_riverpod: ^2.5.1
+  camera: ^0.11.0+2
+  flutter_map: ^8.2.2
+  latlong2: ^0.9.1
+  geolocator: ^12.0.0
+  permission_handler: ^11.3.1
+  dio: ^5.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
+    - assets/images/
