@@ -10,7 +10,7 @@ function accountMeta(authUser = null, authMeta = null) {
     isAdmin,
     model: isAdmin ? Admin : User,
     accountType: isAdmin ? 'admin' : 'user',
-    role: isAdmin ? (authUser?.role || authMeta?.role || 'support_admin') : 'user',
+    role: isAdmin ? (authUser?.role || 'support_admin') : 'user',
   };
 }
 
@@ -24,7 +24,6 @@ function serializeProfile(account, meta) {
     account_type: meta.accountType,
     email_verified: Boolean(account.isEmailVerified),
     phone_verified: Boolean(account.isPhoneVerified),
-    token: null,
   };
 }
 

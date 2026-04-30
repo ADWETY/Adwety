@@ -3,11 +3,24 @@ const success = require('../../utils/response');
 const authService = require('./auth.service');
 const { setAuthCookies, clearAuthCookies } = require('../../middleware/security');
 
+function pickSessionPayload(payload, csrfToken) {
+  return {
+    id: payload.id,
+    name: payload.name,
+    email: payload.email,
+    phone_number: payload.phone_number || '',
+    role: payload.role,
+    account_type: payload.account_type,
+    email_verified: Boolean(payload.email_verified),
+    phone_verified: Boolean(payload.phone_verified),
+    csrf_token: csrfToken,
+  };
+}
+
 function attachCookieSession(res, payload) {
   if (!payload?.token) return payload;
   const csrfToken = setAuthCookies(res, payload.token);
-  const { token, ...safePayload } = payload;
-  return { ...safePayload, csrf_token: csrfToken };
+  return pickSessionPayload(payload, csrfToken);
 }
 
 exports.register = asyncHandler(async (req, res) => {

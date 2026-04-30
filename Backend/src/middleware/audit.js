@@ -7,7 +7,7 @@ function auditAction(action) {
       AuditLog.create({
         actorId: req.authUser?._id || null,
         actorType: req.authMeta?.type || 'unknown',
-        actorRole: req.authMeta?.role || req.authUser?.role || 'user',
+        actorRole: req.authRole || 'unknown',
         action,
         method: req.method,
         path: req.originalUrl,

@@ -20,6 +20,12 @@ Set these in Backend/.env before running seed:
 - SEED_SUPPORT_ADMIN_PASSWORD
 - SEED_DEMO_USER_PASSWORD`;
 
+function assertSeedAllowed() {
+  if (env.nodeEnv === 'production' && !env.allowProductionSeed) {
+    throw new Error('Seeding is disabled in production. Set ALLOW_PRODUCTION_SEED=true only for a controlled maintenance window.');
+  }
+}
+
 function requireSeedEnv() {
   const missing = [];
   const required = [
@@ -145,6 +151,7 @@ async function createAccountsFromEnv() {
 }
 
 async function seed() {
+  assertSeedAllowed();
   requireSeedEnv();
   await connectDatabase();
 

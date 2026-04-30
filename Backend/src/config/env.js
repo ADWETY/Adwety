@@ -105,6 +105,7 @@ const env = {
   smsProvider: clean(process.env.SMS_PROVIDER, 'console'),
   smsFrom: clean(process.env.SMS_FROM, 'ADWETY'),
   seedForceReset: parseBoolean(process.env.SEED_FORCE_RESET, false),
+  allowProductionSeed: parseBoolean(process.env.ALLOW_PRODUCTION_SEED, false),
   seedOwnerEmail: clean(process.env.SEED_OWNER_EMAIL),
   seedOwnerPassword: clean(process.env.SEED_OWNER_PASSWORD),
   seedSuperAdminEmail: clean(process.env.SEED_SUPER_ADMIN_EMAIL),

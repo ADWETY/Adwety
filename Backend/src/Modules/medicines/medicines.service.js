@@ -57,7 +57,7 @@ async function trimSearchHistory(userId) {
 }
 
 function getPharmacyScope(authUser, authMeta) {
-  const role = authUser?.role || authMeta?.role;
+  const role = authUser?.role;
   if (role !== 'pharmacy_admin') return null;
   const pharmacyId = authUser?.pharmacyId;
   if (!pharmacyId) throw new AppError('Forbidden: pharmacy admin is not assigned to a pharmacy', 403);
@@ -173,14 +173,25 @@ async function updateMedicine(id, payload, authUser = null, authMeta = null) {
   if (!drug) throw new AppError('Medicine not found', 404);
 
   const scope = getPharmacyScope(authUser, authMeta);
-  if (scope && payload.pharmacy_id && String(payload.pharmacy_id) !== String(scope)) {
-    throw new AppError('Forbidden: you can only manage your assigned pharmacy inventory', 403);
+  if (scope) {
+    if (payload.pharmacy_id && String(payload.pharmacy_id) !== String(scope)) {
+      throw new AppError('Forbidden: cross-pharmacy access denied', 403);
+    }
+    payload.pharmacy_id = scope;
   }
 
   let inventory = null;
   const hasInventoryFields = payload.pharmacy_id || payload.price !== undefined || payload.quantity !== undefined;
-  if (payload.inventory_id) inventory = await Inventory.findById(payload.inventory_id);
-  else if (payload.pharmacy_id || scope) inventory = await Inventory.findOne({ drugId: drug._id, pharmacyId: payload.pharmacy_id || scope });
+  if (payload.inventory_id) {
+    inventory = await Inventory.findOne({
+      _id: payload.inventory_id,
+      drugId: drug._id,
+      ...(scope ? { pharmacyId: scope } : {}),
+    });
+    if (!inventory) throw new AppError('Inventory item not found or access denied', 404);
+  } else if (payload.pharmacy_id || scope) {
+    inventory = await Inventory.findOne({ drugId: drug._id, pharmacyId: payload.pharmacy_id || scope });
+  }
   await assertInventoryOwnership(inventory, authUser, authMeta);
 
   if (!scope) {
@@ -220,9 +231,13 @@ async function deleteMedicine(id, { inventory_id } = {}, authUser = null, authMe
   if (scope && !inventory_id) throw new AppError('Forbidden: pharmacy admins must delete a specific inventory item', 403);
 
   if (inventory_id) {
-    const inventory = await Inventory.findOne({ _id: inventory_id, drugId: drug._id });
+    const inventory = await Inventory.findOne({
+      _id: inventory_id,
+      drugId: drug._id,
+      ...(scope ? { pharmacyId: scope } : {}),
+    });
     await assertInventoryOwnership(inventory, authUser, authMeta);
-    if (!inventory) throw new AppError('Inventory item not found', 404);
+    if (!inventory) throw new AppError('Inventory item not found or access denied', 404);
     await Inventory.deleteOne({ _id: inventory._id });
     const remaining = await Inventory.countDocuments({ drugId: drug._id });
     if (!remaining) await Drug.findByIdAndDelete(drug._id);

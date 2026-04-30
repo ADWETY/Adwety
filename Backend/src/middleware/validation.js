@@ -2,10 +2,12 @@ const { ZodError } = require('zod');
 const env = require('../config/env');
 const { AppError } = require('../utils/error-handling');
 
+const SAFE_DEBUG_ENVS = new Set(['development', 'test']);
+
 function normalizeZodIssues(error) {
-  if (env.nodeEnv === 'production') return null;
+  if (!SAFE_DEBUG_ENVS.has(env.nodeEnv)) return null;
   return error.issues.map((issue) => ({
-    path: issue.path.join('.'),
+    field: issue.path[issue.path.length - 1] || 'unknown',
     message: issue.message,
   }));
 }

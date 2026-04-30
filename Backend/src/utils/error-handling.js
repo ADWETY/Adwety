@@ -18,12 +18,13 @@ function globalErrorHandler(error, req, res, _next) {
   const isProduction = env.nodeEnv === 'production';
 
   if (statusCode >= 500) {
-    console.error('[ERROR]', {
+    const logEntry = {
       message: error.message,
-      stack: error.stack,
       path: req?.originalUrl,
       method: req?.method,
-    });
+    };
+    if (!isProduction) logEntry.stack = error.stack;
+    console.error('[ERROR]', logEntry);
   }
 
   const safeMessage = statusCode >= 500 && isProduction ? 'Internal server error' : (error.message || 'Internal server error');

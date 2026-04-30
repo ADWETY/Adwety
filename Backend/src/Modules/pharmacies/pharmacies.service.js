@@ -6,7 +6,7 @@ const { stockStatusFromQuantity } = require('../medicines/medicines.service');
 const { escapeRegex } = require('../../utils/security');
 
 function getPharmacyScope(authUser, authMeta) {
-  const role = authUser?.role || authMeta?.role;
+  const role = authUser?.role;
   if (role !== 'pharmacy_admin') return null;
   const pharmacyId = authUser?.pharmacyId;
   if (!pharmacyId) throw new AppError('Forbidden: pharmacy admin is not assigned to a pharmacy', 403);

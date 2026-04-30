@@ -6,7 +6,8 @@ const { AppError } = require('../utils/error-handling');
 
 async function resolveAccount(payload) {
   if (payload.type === 'admin') return Admin.findById(payload.sub).select('+passwordHash');
-  return User.findById(payload.sub).select('+passwordHash');
+  if (payload.type === 'user') return User.findById(payload.sub).select('+passwordHash');
+  return null;
 }
 
 function readToken(req) {
@@ -23,38 +24,55 @@ function assertTokenNotRevoked(payload, account) {
   }
 }
 
+function deriveRoleFromAccount(payload, account) {
+  if (payload.type === 'admin') return account.role;
+  if (payload.type === 'user') return 'user';
+  return null;
+}
+
+async function authenticateRequest(req) {
+  const token = readToken(req);
+  if (!token) throw new AppError('Unauthorized', 401);
+
+  const payload = verifyToken(token);
+  const account = await resolveAccount(payload);
+
+  if (!account || account.isActive === false) throw new AppError('Unauthorized', 401);
+  assertTokenNotRevoked(payload, account);
+
+  const role = deriveRoleFromAccount(payload, account);
+  if (!role) throw new AppError('Unauthorized', 401);
+
+  req.authUser = account;
+  req.authMeta = { sub: payload.sub, type: payload.type, iat: payload.iat, exp: payload.exp };
+  req.authRole = role;
+}
+
 async function auth(req, _res, next) {
   try {
-    const token = readToken(req);
-    if (!token) throw new AppError('Unauthorized', 401);
-
-    const payload = verifyToken(token);
-    const account = await resolveAccount(payload);
-
-    if (!account || account.isActive === false) throw new AppError('Unauthorized', 401);
-    assertTokenNotRevoked(payload, account);
-
-    req.authUser = account;
-    req.authMeta = payload;
-    next();
+    await authenticateRequest(req);
+    return next();
   } catch (_error) {
-    next(new AppError('Unauthorized', 401));
+    return next(new AppError('Unauthorized', 401));
   }
 }
 
-function optionalAuth(req, _res, next) {
-  const header = req.headers.authorization || '';
-  const hasHeaderToken = header.startsWith('Bearer ');
-  const hasCookieToken = Boolean(req.cookies?.[env.authCookieName]);
-  if (!hasHeaderToken && !hasCookieToken) return next();
-  return auth(req, _res, next);
+async function optionalAuth(req, _res, next) {
+  const token = readToken(req);
+  if (!token) return next();
+  try {
+    await authenticateRequest(req);
+    return next();
+  } catch (_error) {
+    return next(new AppError('Unauthorized', 401));
+  }
 }
 
 function authorize(...allowedRoles) {
   const flatRoles = allowedRoles.flat();
   return (req, _res, next) => {
-    const role = req.authUser?.role || req.authMeta?.role || 'user';
-    if (!flatRoles.includes(role)) {
+    const role = req.authRole;
+    if (!role || !flatRoles.includes(role)) {
       return next(new AppError('Forbidden: insufficient permissions', 403));
     }
     return next();

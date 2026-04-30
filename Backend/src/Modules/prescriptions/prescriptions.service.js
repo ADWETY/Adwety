@@ -1,12 +1,19 @@
+const crypto = require('crypto');
 const Prescription = require('../../../DB/Models/prescription.model');
 const PrescriptionExtractedDrug = require('../../../DB/Models/prescriptionextracteddrug.model');
 const { saveBuffer } = require('../../services/storage.service');
 const { extractPrescription } = require('../../services/ai/ai.service');
 const { AppError } = require('../../utils/error-handling');
+const env = require('../../config/env');
 const { validateUploadedFileContent } = require('../../middleware/upload');
+
+function publicPrescriptionId(id) {
+  return crypto.createHmac('sha256', env.jwtSecret).update(String(id)).digest('hex').slice(0, 32);
+}
 
 async function scanPrescription({ file, userId, mockText }) {
   if (!userId) throw new AppError('Unauthorized', 401);
+  if (mockText && env.nodeEnv === 'production') throw new AppError('mock_text is disabled in production', 403);
   if (!file && !mockText) throw new AppError('Prescription image/PDF or mock_text is required', 422);
   if (file?.buffer) validateUploadedFileContent(file);
 
@@ -57,7 +64,7 @@ async function scanPrescription({ file, userId, mockText }) {
   }
 
   return {
-    prescription_id: prescription._id.toString(),
+    prescription_id: publicPrescriptionId(prescription._id),
     image_url: imageUrl,
     extracted_text: prescription.extractedText,
     extracted_drugs: savedExtractedDrugs,

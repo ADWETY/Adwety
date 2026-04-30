@@ -26,12 +26,9 @@ function assertPasswordLength(password) {
 }
 
 function secureCompare(a, b) {
-  const left = Buffer.from(String(a || ''), 'utf8');
-  const right = Buffer.from(String(b || ''), 'utf8');
-  if (left.length !== right.length) {
-    crypto.timingSafeEqual(left, Buffer.alloc(left.length));
-    return false;
-  }
+  const key = crypto.randomBytes(32);
+  const left = crypto.createHmac('sha256', key).update(String(a || '')).digest();
+  const right = crypto.createHmac('sha256', key).update(String(b || '')).digest();
   return crypto.timingSafeEqual(left, right);
 }
 

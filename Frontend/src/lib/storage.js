@@ -9,16 +9,11 @@ function getSessionStore() {
 function sanitizeSession(session) {
   if (!session || typeof session !== 'object') return null;
   return {
-    id: session.id,
-    email: session.email,
     name: session.name,
     role: session.role,
     accountType: session.accountType,
     pharmacyName: session.pharmacyName || null,
     demoMode: Boolean(session.demoMode),
-    emailVerified: Boolean(session.emailVerified),
-    phoneNumber: session.phoneNumber || '',
-    phoneVerified: Boolean(session.phoneVerified),
   };
 }
 

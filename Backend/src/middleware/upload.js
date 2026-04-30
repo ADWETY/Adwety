@@ -5,12 +5,25 @@ const { AppError } = require('../utils/error-handling');
 
 const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 const allowedExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp', '.pdf']);
+const mimeExtensions = {
+  'image/jpeg': new Set(['.jpg', '.jpeg']),
+  'image/png': new Set(['.png']),
+  'image/webp': new Set(['.webp']),
+  'application/pdf': new Set(['.pdf']),
+};
 
 function fileFilter(_req, file, callback) {
   const ext = path.extname(file.originalname || '').toLowerCase();
-  if (!allowedMimeTypes.has(file.mimetype) || !allowedExtensions.has(ext)) {
+  const declaredMime = String(file.mimetype || '').toLowerCase();
+
+  if (!allowedMimeTypes.has(declaredMime) || !allowedExtensions.has(ext)) {
     return callback(new AppError('Invalid upload type. Only JPG, PNG, WEBP and PDF are allowed.', 415));
   }
+
+  if (!mimeExtensions[declaredMime]?.has(ext)) {
+    return callback(new AppError('MIME type and file extension do not match.', 415));
+  }
+
   return callback(null, true);
 }
 
@@ -29,7 +42,7 @@ function validateUploadedFileContent(file) {
   if (!detected || !allowedMimeTypes.has(detected)) {
     throw new AppError('File content does not match an allowed image/PDF type.', 415);
   }
-  if (detected !== file.mimetype) {
+  if (detected !== String(file.mimetype || '').toLowerCase()) {
     throw new AppError('MIME type mismatch detected.', 415);
   }
 }

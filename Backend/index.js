@@ -19,12 +19,13 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'https:'],
+      styleSrc: ["'self'"],
+      imgSrc: ["'self'", 'https:'],
       connectSrc: ["'self'", env.frontendBaseUrl, env.frontendPublicUrl, ...env.corsOrigins],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       frameAncestors: ["'none'"],
+      upgradeInsecureRequests: [],
     },
   },
   hsts: {
@@ -33,6 +34,11 @@ app.use(helmet({
     preload: true,
   },
 }));
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
 app.use(cors(corsOptions()));
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 app.use('/api', (_req, res, next) => {
@@ -50,11 +56,8 @@ app.use('/api/v1', apiLimiter);
 
 app.get('/health', (_req, res) => {
   res.json({
-    success: true,
-    message: 'ADWETY backend is running securely',
-    environment: env.nodeEnv,
-    ai_provider: env.aiProvider,
-    port: env.port,
+    status: 'ok',
+    timestamp: new Date().toISOString(),
   });
 });
 

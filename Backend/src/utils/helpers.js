@@ -8,6 +8,7 @@ function makePagination(query = {}) {
 }
 
 function isValidObjectId(id) {
+  if (typeof id !== 'string' || !/^[a-fA-F0-9]{24}$/.test(id)) return false;
   return mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
 }
 

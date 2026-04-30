@@ -4,6 +4,8 @@ const env = require('../config/env');
 const { AppError } = require('../utils/error-handling');
 const { sanitizeRequestObject, sanitizeEmail } = require('../utils/security');
 
+const unsafeCookieKeys = new Set(['__proto__', 'constructor', 'prototype']);
+
 function sanitizeRequest(req, _res, next) {
   if (req.body && typeof req.body === 'object') sanitizeRequestObject(req.body);
   if (req.query && typeof req.query === 'object') sanitizeRequestObject(req.query);
@@ -29,13 +31,13 @@ function corsOptions() {
 
 function parseCookies(req, _res, next) {
   const header = req.headers.cookie || '';
-  req.cookies = {};
+  req.cookies = Object.create(null);
   header.split(';').forEach((part) => {
     const index = part.indexOf('=');
     if (index === -1) return;
     const key = part.slice(0, index).trim();
     const value = part.slice(index + 1).trim();
-    if (!key) return;
+    if (!key || unsafeCookieKeys.has(key)) return;
     try { req.cookies[key] = decodeURIComponent(value); } catch (_) { req.cookies[key] = value; }
   });
   next();
@@ -70,6 +72,16 @@ function clearAuthCookies(res) {
   res.clearCookie(env.csrfCookieName, options);
 }
 
+function safeTokenEqual(leftValue, rightValue) {
+  const left = Buffer.from(String(leftValue || ''), 'utf8');
+  const right = Buffer.from(String(rightValue || ''), 'utf8');
+  if (!left.length || !right.length) return false;
+  const key = crypto.randomBytes(32);
+  const leftDigest = crypto.createHmac('sha256', key).update(left).digest();
+  const rightDigest = crypto.createHmac('sha256', key).update(right).digest();
+  return crypto.timingSafeEqual(leftDigest, rightDigest);
+}
+
 function csrfProtection(req, _res, next) {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
 
@@ -79,7 +91,7 @@ function csrfProtection(req, _res, next) {
 
   const cookieToken = req.cookies?.[env.csrfCookieName];
   const headerToken = req.headers['x-csrf-token'];
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+  if (!safeTokenEqual(cookieToken, headerToken)) {
     return next(new AppError('CSRF token validation failed', 403));
   }
   return next();
@@ -94,12 +106,12 @@ function getRateLimitKey(req) {
   return `${ip}:${req.originalUrl.split('?')[0]}`.slice(0, 500);
 }
 
-function createRateLimiter({ windowMs = 15 * 60 * 1000, max = 100, message = 'Too many requests' } = {}) {
+function createRateLimiter({ windowMs = 15 * 60 * 1000, max = 100, message = 'Too many requests', keyGenerator = null } = {}) {
   return async (req, _res, next) => {
     try {
       const now = new Date();
       const resetAt = new Date(Date.now() + windowMs);
-      const key = getRateLimitKey(req);
+      const key = String(keyGenerator ? keyGenerator(req) : getRateLimitKey(req)).slice(0, 500);
 
       await RateLimit.deleteMany({ resetAt: { $lte: now } }).catch(() => {});
       const record = await RateLimit.findOneAndUpdate(
@@ -144,6 +156,13 @@ const apiLimiter = createRateLimiter({ max: 300, windowMs: 15 * 60 * 1000 });
 const authLimiter = createRateLimiter({ max: 10, windowMs: 15 * 60 * 1000, message: 'Too many login attempts. Please try again later.' });
 const uploadLimiter = createRateLimiter({ max: 30, windowMs: 15 * 60 * 1000, message: 'Too many upload requests. Please try again later.' });
 const otpEmailLimiter = createEmailRateLimiter({ max: 3, windowMs: 60 * 60 * 1000 });
+const authEmailLimiter = createEmailRateLimiter({ max: 5, windowMs: 15 * 60 * 1000, message: 'Too many attempts for this account. Please try again later.' });
+const scanUserLimiter = createRateLimiter({
+  max: 10,
+  windowMs: 60 * 60 * 1000,
+  message: 'Prescription scan limit exceeded. Please try again later.',
+  keyGenerator: (req) => `scan:${req.authUser?._id || req.ip || 'anonymous'}`,
+});
 
 module.exports = {
   sanitizeRequest,
@@ -158,4 +177,6 @@ module.exports = {
   authLimiter,
   uploadLimiter,
   otpEmailLimiter,
+  authEmailLimiter,
+  scanUserLimiter,
 };
