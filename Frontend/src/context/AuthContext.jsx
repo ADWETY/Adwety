@@ -23,7 +23,6 @@ function buildSession(payload, fallback = {}) {
     pharmacyName: fallback.role === 'pharmacy_admin' ? env.demoUsers.pharmacy_admin.pharmacyName : null,
     demoMode: Boolean(payload.demo_mode),
     token: null,
-    csrfToken: payload.csrf_token || fallback.csrfToken || null,
     emailVerified: Boolean(payload.email_verified),
     phoneNumber: payload.phone_number || fallback.phoneNumber || '',
     phoneVerified: Boolean(payload.phone_verified),
@@ -105,12 +104,14 @@ export function AuthProvider({ children }) {
       const result = await postJson('/auth/forgot-password', { email });
       return result?.data || {};
     },
-    async resetPassword({ otpToken, otp, newPassword }) {
-      const result = await postJson('/auth/reset-password', {
-        otp_token: otpToken,
+    async resetPassword({ email, otpToken, otp, newPassword }) {
+      const body = {
         otp,
         new_password: newPassword,
-      });
+      };
+      if (otpToken) body.otp_token = otpToken;
+      else body.email = email;
+      const result = await postJson('/auth/reset-password', body);
       return result?.data || {};
     },
     updateSessionProfile(profile) {

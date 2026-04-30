@@ -13,15 +13,26 @@ function notFoundHandler(_req, _res, next) {
   next(new AppError('Route not found', 404));
 }
 
-function globalErrorHandler(error, _req, res, _next) {
+function globalErrorHandler(error, req, res, _next) {
   const statusCode = error.statusCode || 500;
   const isProduction = env.nodeEnv === 'production';
+
+  if (statusCode >= 500) {
+    console.error('[ERROR]', {
+      message: error.message,
+      stack: error.stack,
+      path: req?.originalUrl,
+      method: req?.method,
+    });
+  }
+
   const safeMessage = statusCode >= 500 && isProduction ? 'Internal server error' : (error.message || 'Internal server error');
+  const safeDetails = isProduction ? null : (error.details || null);
 
   res.status(statusCode).json({
     success: false,
     message: safeMessage,
-    details: !isProduction && error.details ? error.details : null,
+    details: safeDetails,
   });
 }
 

@@ -5,6 +5,7 @@ const schema = withJsonTransform(new mongoose.Schema({
   passwordHash: { type: String, required: true },
   phoneNumber: { type: String, trim: true, default: '' },
   role: { type: String, enum: ['owner', 'super_admin', 'pharmacy_admin', 'support_admin', 'user'], default: 'support_admin' },
+  pharmacyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Pharmacy', default: null },
   isActive: { type: Boolean, default: true },
   isEmailVerified: { type: Boolean, default: true },
   isPhoneVerified: { type: Boolean, default: false },

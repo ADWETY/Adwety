@@ -44,9 +44,14 @@ function isWeakSecret(secret) {
   return !secret || secret.length < 64 || ['change-me', 'replace_with_a_long_random_secret', 'secret', 'jwt_secret'].includes(secret);
 }
 
-const providedJwtSecret = clean(process.env.JWT_SECRET);
-const runtimeJwtSecret = providedJwtSecret || crypto.randomBytes(64).toString('hex');
 const nodeEnv = clean(process.env.NODE_ENV, 'development');
+const providedJwtSecret = clean(process.env.JWT_SECRET);
+
+if (!providedJwtSecret && nodeEnv === 'production') {
+  throw new Error('Security error: JWT_SECRET must be set in production. Generate one with: openssl rand -hex 64');
+}
+
+const runtimeJwtSecret = providedJwtSecret || crypto.randomBytes(64).toString('hex');
 
 const env = {
   nodeEnv,
@@ -113,7 +118,7 @@ const env = {
 };
 
 if (!providedJwtSecret) {
-  console.warn('[SECURITY WARNING] JWT_SECRET is not set. A random runtime secret was generated. Set JWT_SECRET in Backend/.env for stable sessions.');
+  console.warn('[SECURITY WARNING] JWT_SECRET is not set. A random runtime secret was generated for development only. Set JWT_SECRET in Backend/.env for stable sessions.');
 }
 
 if (isWeakSecret(env.jwtSecret)) {
@@ -125,6 +130,10 @@ if (isWeakSecret(env.jwtSecret)) {
 
 if (env.nodeEnv === 'production' && env.enableDemoAuth) {
   throw new Error('Security error: ENABLE_DEMO_AUTH must be false in production.');
+}
+
+if (env.mailDriver === 'smtp' && env.smtpUser && env.mailFromEmail && env.smtpUser.toLowerCase() !== env.mailFromEmail.toLowerCase() && env.nodeEnv === 'production') {
+  console.warn('[MAIL WARNING] MAIL_FROM_EMAIL is different from SMTP_USER. Use an authenticated domain or matching Gmail account to improve inbox delivery.');
 }
 
 module.exports = env;

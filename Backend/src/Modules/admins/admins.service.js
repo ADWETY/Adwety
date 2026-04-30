@@ -1,7 +1,9 @@
 const bcrypt = require('bcryptjs');
 const Admin = require('../../../DB/Models/admin.model');
+const Pharmacy = require('../../../DB/Models/pharmacy.model');
 const env = require('../../config/env');
 const { AppError } = require('../../utils/error-handling');
+const { validateObjectId } = require('../../utils/helpers');
 const { sanitizeEmail } = require('../../utils/security');
 
 function serializeAdmin(admin) {
@@ -25,6 +27,15 @@ async function assertCanWrite(admin, currentOwnerId) {
   if (admin.role === 'owner' && String(admin._id) !== String(currentOwnerId)) {
     throw new AppError('Owner account cannot be modified here', 403);
   }
+}
+
+async function resolvePharmacyId(pharmacyId, role) {
+  if (role !== 'pharmacy_admin') return null;
+  if (!pharmacyId) throw new AppError('pharmacy_id is required for pharmacy_admin accounts', 422);
+  validateObjectId(pharmacyId, 'pharmacy_id');
+  const pharmacy = await Pharmacy.findById(pharmacyId).select('_id');
+  if (!pharmacy) throw new AppError('Assigned pharmacy was not found', 404);
+  return pharmacy._id;
 }
 
 async function listAdmins(query = {}) {
@@ -51,6 +62,7 @@ async function createAdmin(payload) {
     passwordHash,
     phoneNumber: payload.phone_number || '',
     role,
+    pharmacyId: await resolvePharmacyId(payload.pharmacy_id, role),
     isActive: true,
     isEmailVerified: true,
     approvalStatus: 'approved',
@@ -67,6 +79,10 @@ async function updateAdmin(id, payload, currentOwnerId) {
   if (payload.role !== undefined) {
     if (!['super_admin', 'pharmacy_admin', 'support_admin'].includes(payload.role)) throw new AppError('Invalid admin role', 400);
     admin.role = payload.role;
+  }
+  if (payload.pharmacy_id !== undefined || payload.role !== undefined) {
+    const nextRole = payload.role || admin.role;
+    admin.pharmacyId = await resolvePharmacyId(payload.pharmacy_id || admin.pharmacyId, nextRole);
   }
   if (payload.is_active !== undefined) admin.isActive = Boolean(payload.is_active);
   await admin.save();

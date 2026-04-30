@@ -5,6 +5,19 @@ const { validateObjectId } = require('../../utils/helpers');
 const { stockStatusFromQuantity } = require('../medicines/medicines.service');
 const { escapeRegex } = require('../../utils/security');
 
+function getPharmacyScope(authUser, authMeta) {
+  const role = authUser?.role || authMeta?.role;
+  if (role !== 'pharmacy_admin') return null;
+  const pharmacyId = authUser?.pharmacyId;
+  if (!pharmacyId) throw new AppError('Forbidden: pharmacy admin is not assigned to a pharmacy', 403);
+  return pharmacyId;
+}
+
+function assertPharmacyAccess(id, authUser, authMeta) {
+  const scope = getPharmacyScope(authUser, authMeta);
+  if (scope && String(id) !== String(scope)) throw new AppError('Forbidden: you can only access your assigned pharmacy', 403);
+}
+
 function normalizePharmacy(pharmacy, inventoryCount = 0) {
   return {
     id: pharmacy._id.toString(),
@@ -49,8 +62,9 @@ async function listPharmacies({ featured, q, status } = {}) {
   return pharmacies.map((pharmacy) => normalizePharmacy(pharmacy, countMap.get(String(pharmacy._id)) || 0));
 }
 
-async function getPharmacyDetails(id) {
+async function getPharmacyDetails(id, authUser = null, authMeta = null) {
   validateObjectId(id);
+  assertPharmacyAccess(id, authUser, authMeta);
   const pharmacy = await Pharmacy.findById(id).lean();
   if (!pharmacy) throw new AppError('Pharmacy not found', 404);
   const inventory = await Inventory.find({ pharmacyId: pharmacy._id }).populate('drugId', 'name strength form description imageUrl').lean();
@@ -89,8 +103,9 @@ async function createPharmacy(payload) {
   return normalizePharmacy(pharmacy.toObject(), 0);
 }
 
-async function updatePharmacy(id, payload) {
+async function updatePharmacy(id, payload, authUser = null, authMeta = null) {
   validateObjectId(id);
+  assertPharmacyAccess(id, authUser, authMeta);
   const pharmacy = await Pharmacy.findById(id);
   if (!pharmacy) throw new AppError('Pharmacy not found', 404);
   const mapping = {
@@ -109,8 +124,9 @@ async function updatePharmacy(id, payload) {
   return normalizePharmacy(pharmacy.toObject(), inventoryCount);
 }
 
-async function deletePharmacy(id) {
+async function deletePharmacy(id, authUser = null, authMeta = null) {
   validateObjectId(id);
+  assertPharmacyAccess(id, authUser, authMeta);
   const pharmacy = await Pharmacy.findById(id);
   if (!pharmacy) throw new AppError('Pharmacy not found', 404);
   await Inventory.deleteMany({ pharmacyId: pharmacy._id });

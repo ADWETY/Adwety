@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
+const { randomUUID } = require('crypto');
 const env = require('../config/env');
+const { AppError } = require('../utils/error-handling');
 
 function ensureUploadDir() {
   const fullPath = path.resolve(process.cwd(), env.uploadDir);
@@ -16,9 +17,14 @@ function safeExtension(originalName = 'upload.bin') {
 
 function saveBuffer(buffer, originalName = 'upload.bin') {
   const uploadDir = ensureUploadDir();
-  const fileName = `${Date.now()}-${crypto.randomBytes(12).toString('hex')}${safeExtension(originalName)}`;
+  const fileName = `${randomUUID()}${safeExtension(originalName)}`;
   const fullPath = path.join(uploadDir, fileName);
-  fs.writeFileSync(fullPath, buffer, { mode: 0o600 });
+  const resolvedPath = path.resolve(fullPath);
+  const resolvedUploadDir = path.resolve(uploadDir);
+  if (!resolvedPath.startsWith(`${resolvedUploadDir}${path.sep}`)) {
+    throw new AppError('Invalid upload path', 400);
+  }
+  fs.writeFileSync(resolvedPath, buffer, { mode: 0o600 });
   return `private://${fileName}`;
 }
 

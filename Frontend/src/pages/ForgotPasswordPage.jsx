@@ -23,13 +23,9 @@ export default function ForgotPasswordPage() {
     setMessage('');
     setError('');
     try {
-      const result = await requestPasswordReset({ email });
-      if (result?.otp_token) {
-        setOtpState(result);
-        setMessage(t('otp.sent'));
-      } else {
-        setMessage(t('otp.ifExists'));
-      }
+      await requestPasswordReset({ email });
+      setOtpState({ email, expires_in_minutes: 10 });
+      setMessage(t('otp.ifExists'));
     } catch (submitError) {
       setError(submitError.message);
     } finally {
@@ -46,10 +42,12 @@ export default function ForgotPasswordPage() {
     setSubmitting(true);
     setError('');
     try {
-      await resetPassword({ otpToken: otpState.otp_token, otp, newPassword: passwords.newPassword });
+      await resetPassword({ email: otpState.email, otpToken: otpState.otp_token, otp, newPassword: passwords.newPassword });
       setMessage(t('otp.passwordResetDone'));
       toast.success(t('otp.passwordResetDone'));
       setOtpState(null);
+      setOtp('');
+      setPasswords({ newPassword: '', confirmPassword: '' });
     } catch (submitError) {
       setError(submitError.message);
       toast.error(t('toast.failed'));
@@ -67,7 +65,7 @@ export default function ForgotPasswordPage() {
         {otpState ? (
           <form className="mt-8 space-y-5" onSubmit={onReset}>
             <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
-              {t('otp.sentTo')} {otpState.delivery?.destination || email}. {t('otp.expiresIn')} {otpState.expires_in_minutes} {t('otp.minutes')}.
+              {t('otp.sentTo')} {otpState.email}. {t('otp.expiresIn')} {otpState.expires_in_minutes} {t('otp.minutes')}.
             </div>
             <div>
               <label className="label">{t('otp.code')}</label>
@@ -94,7 +92,7 @@ export default function ForgotPasswordPage() {
           <form className="mt-8 space-y-5" onSubmit={onRequestOtp}>
             <div>
               <label className="label">{t('common.email')}</label>
-              <input className="input" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@adwety.app" />
+              <input className="input" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />
             </div>
             {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">{message}</div> : null}
             {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100">{error}</div> : null}

@@ -2,6 +2,7 @@ const { z } = require('zod');
 
 const passwordSchema = z.string()
   .min(10, 'Password must be at least 10 characters')
+  .max(72, 'Password must be at most 72 characters')
   .regex(/[A-Z]/, 'Password must include an uppercase letter')
   .regex(/[a-z]/, 'Password must include a lowercase letter')
   .regex(/[0-9]/, 'Password must include a number');
@@ -32,7 +33,7 @@ const verifyOtpSchema = z.object({
 const loginSchema = z.object({
   body: z.object({
     email: z.string().email().max(254),
-    password: z.string().min(1).max(256),
+    password: z.string().min(1).max(72),
   }),
   query: z.object({}).strict(),
   params: z.object({}).strict(),
@@ -46,10 +47,11 @@ const forgotPasswordSchema = z.object({
 
 const resetPasswordSchema = z.object({
   body: z.object({
-    otp_token: otpTokenSchema,
+    email: z.string().email().max(254).optional(),
+    otp_token: otpTokenSchema.optional(),
     otp: otpSchema,
     new_password: passwordSchema,
-  }),
+  }).refine((value) => Boolean(value.email || value.otp_token), 'Email or OTP token is required'),
   query: z.object({}).strict(),
   params: z.object({}).strict(),
 });

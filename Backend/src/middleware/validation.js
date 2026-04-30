@@ -1,5 +1,14 @@
 const { ZodError } = require('zod');
+const env = require('../config/env');
 const { AppError } = require('../utils/error-handling');
+
+function normalizeZodIssues(error) {
+  if (env.nodeEnv === 'production') return null;
+  return error.issues.map((issue) => ({
+    path: issue.path.join('.'),
+    message: issue.message,
+  }));
+}
 
 module.exports = function validate(schema) {
   return (req, _res, next) => {
@@ -9,7 +18,7 @@ module.exports = function validate(schema) {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        next(new AppError('Validation failed', 422, error.flatten()));
+        next(new AppError('Validation failed', 422, normalizeZodIssues(error)));
         return;
       }
       next(error);

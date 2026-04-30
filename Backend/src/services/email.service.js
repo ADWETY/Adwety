@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const env = require('../config/env');
 const { AppError } = require('../utils/error-handling');
 
@@ -69,32 +70,32 @@ function getTransporter() {
 function buildOtpEmail({ otp, purpose, destination }) {
   const purposeMap = {
     register: {
-      arTitle: 'تأكيد حساب ADWETY',
+      arTitle: 'تأكيد حسابك في ADWETY',
       enTitle: 'Verify your ADWETY account',
-      arLead: 'استخدم الكود التالي لتأكيد بريدك الإلكتروني وتفعيل الحساب.',
-      enLead: 'Use the following code to verify your email and continue account activation.',
-      subject: 'ADWETY verification code',
+      arLead: 'أدخل كود التحقق التالي لإكمال إنشاء حسابك.',
+      enLead: 'Enter this verification code to finish creating your account.',
+      subject: 'Your ADWETY verification code',
     },
     login: {
-      arTitle: 'كود تسجيل الدخول إلى ADWETY',
-      enTitle: 'ADWETY login code',
-      arLead: 'استخدم الكود التالي لإكمال تسجيل الدخول.',
-      enLead: 'Use the following code to complete your login.',
-      subject: 'ADWETY login code',
+      arTitle: 'تسجيل الدخول إلى ADWETY',
+      enTitle: 'ADWETY sign-in verification',
+      arLead: 'أدخل كود التحقق التالي لإكمال تسجيل الدخول.',
+      enLead: 'Enter this verification code to complete your sign in.',
+      subject: 'Your ADWETY sign-in code',
     },
     password_reset: {
-      arTitle: 'كود إعادة تعيين كلمة المرور',
-      enTitle: 'Password reset code',
-      arLead: 'استخدم الكود التالي لإعادة تعيين كلمة المرور الخاصة بك.',
-      enLead: 'Use the following code to reset your password.',
-      subject: 'ADWETY password reset code',
+      arTitle: 'إعادة تعيين كلمة المرور',
+      enTitle: 'Reset your ADWETY password',
+      arLead: 'أدخل كود التحقق التالي لإعادة تعيين كلمة المرور الخاصة بحسابك.',
+      enLead: 'Enter this verification code to reset your account password.',
+      subject: 'Your ADWETY password reset code',
     },
     profile_update: {
-      arTitle: 'تأكيد تعديل البريد الإلكتروني',
-      enTitle: 'Confirm profile email update',
-      arLead: 'استخدم الكود التالي لتأكيد البريد الإلكتروني الجديد في حسابك.',
-      enLead: 'Use the following code to confirm the new email address on your account.',
-      subject: 'ADWETY profile verification code',
+      arTitle: 'تأكيد تعديل بيانات الحساب',
+      enTitle: 'Confirm your ADWETY profile update',
+      arLead: 'أدخل كود التحقق التالي لتأكيد البريد الإلكتروني الجديد.',
+      enLead: 'Enter this verification code to confirm the new email address on your account.',
+      subject: 'Your ADWETY profile verification code',
     },
   };
 
@@ -102,7 +103,19 @@ function buildOtpEmail({ otp, purpose, destination }) {
   const safeOtp = escapeHtml(otp);
   const safeDestination = escapeHtml(destination);
   const expires = env.otpExpiresMinutes;
-  const text = `${copy.enTitle}\n\nYour ADWETY code is: ${otp}\nThis code expires in ${expires} minutes.\n\nSent to: ${destination}`;
+  const text = [
+    copy.enTitle,
+    '',
+    `Your ADWETY verification code is: ${otp}`,
+    `This code expires in ${expires} minutes.`,
+    '',
+    'If you did not request this code, you can safely ignore this message.',
+    '',
+    'Thanks,',
+    'ADWETY Team',
+    '',
+    `Sent to: ${destination}`,
+  ].join('\n');
 
   const html = `<!doctype html>
 <html lang="ar" dir="rtl">
@@ -111,31 +124,34 @@ function buildOtpEmail({ otp, purpose, destination }) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(copy.subject)}</title>
 </head>
-<body style="margin:0;background:#eef7f8;font-family:Arial,Tahoma,sans-serif;color:#0f172a;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef7f8;padding:32px 12px;">
+<body style="margin:0;background:#f4f8fb;font-family:Arial,Tahoma,sans-serif;color:#0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f8fb;padding:28px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #dbeafe;border-radius:28px;overflow:hidden;box-shadow:0 22px 70px rgba(15,23,42,.12);">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:22px;overflow:hidden;">
           <tr>
-            <td style="background:linear-gradient(135deg,#0891b2,#0f766e);padding:34px 28px;text-align:center;color:white;">
-              <div style="letter-spacing:8px;font-weight:700;font-size:13px;margin-bottom:14px;">ADWETY</div>
-              <h1 style="margin:0;font-size:30px;line-height:1.35;font-weight:800;">${escapeHtml(copy.arTitle)}</h1>
-              <p style="margin:14px 0 0;font-size:15px;line-height:1.8;color:#dffcff;">${escapeHtml(copy.arLead)}</p>
+            <td style="background:#0f766e;padding:28px;text-align:center;color:#ffffff;">
+              <div style="font-weight:700;font-size:18px;letter-spacing:2px;">ADWETY</div>
+              <h1 style="margin:18px 0 0;font-size:26px;line-height:1.35;font-weight:800;">${escapeHtml(copy.arTitle)}</h1>
+              <p style="margin:12px 0 0;font-size:15px;line-height:1.8;color:#e6fffb;">${escapeHtml(copy.arLead)}</p>
             </td>
           </tr>
           <tr>
-            <td style="padding:32px 28px;text-align:center;">
-              <p style="margin:0 0 18px;font-size:14px;color:#64748b;">تم إرسال هذا الكود إلى: <strong style="color:#0f172a;direction:ltr;unicode-bidi:bidi-override;">${safeDestination}</strong></p>
-              <div style="display:inline-block;background:#f8fafc;border:1px solid #cbd5e1;border-radius:22px;padding:18px 30px;font-size:38px;letter-spacing:12px;font-weight:900;color:#020617;direction:ltr;">${safeOtp}</div>
-              <p style="margin:22px 0 0;font-size:14px;color:#64748b;">ينتهي الكود خلال <strong>${expires}</strong> دقائق. لا تشارك هذا الكود مع أي شخص.</p>
-              <div style="height:1px;background:#e2e8f0;margin:30px 0;"></div>
-              <h2 style="margin:0;font-size:19px;color:#0f172a;direction:ltr;text-align:left;">${escapeHtml(copy.enTitle)}</h2>
-              <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#64748b;direction:ltr;text-align:left;">${escapeHtml(copy.enLead)} The code expires in ${expires} minutes.</p>
+            <td style="padding:30px 28px;text-align:center;">
+              <p style="margin:0 0 16px;font-size:14px;color:#475569;">تم إرسال الرسالة إلى <strong style="color:#0f172a;direction:ltr;unicode-bidi:bidi-override;">${safeDestination}</strong></p>
+              <div style="display:inline-block;background:#f8fafc;border:1px solid #cbd5e1;border-radius:18px;padding:16px 28px;font-size:36px;letter-spacing:10px;font-weight:900;color:#020617;direction:ltr;">${safeOtp}</div>
+              <p style="margin:20px 0 0;font-size:14px;line-height:1.7;color:#475569;">ينتهي هذا الكود خلال <strong>${expires}</strong> دقائق. لا تشارك هذا الكود مع أي شخص.</p>
+              <div style="height:1px;background:#e2e8f0;margin:28px 0;"></div>
+              <div dir="ltr" style="text-align:left;">
+                <h2 style="margin:0;font-size:18px;color:#0f172a;">${escapeHtml(copy.enTitle)}</h2>
+                <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#475569;">${escapeHtml(copy.enLead)} The code expires in ${expires} minutes.</p>
+                <p style="margin:14px 0 0;font-size:13px;line-height:1.7;color:#64748b;">If you did not request this code, you can safely ignore this email.</p>
+              </div>
             </td>
           </tr>
           <tr>
-            <td style="background:#f8fafc;padding:18px 28px;text-align:center;font-size:12px;color:#94a3b8;">
-              This is an automatic security message from ADWETY.
+            <td style="background:#f8fafc;padding:18px 28px;text-align:center;font-size:12px;color:#64748b;">
+              ADWETY Team · This is an automatic security message.
             </td>
           </tr>
         </table>
@@ -155,17 +171,25 @@ async function sendMail(payload) {
     const fromEmail = env.mailFromEmail || env.smtpUser;
     const info = await transporter.sendMail({
       from: `"${fromName}" <${fromEmail}>`,
+      sender: fromEmail,
       to: payload.to,
       subject: payload.subject,
       text: payload.text,
       html: payload.html,
       replyTo: fromEmail,
+      headers: {
+        'X-Entity-Ref-ID': crypto.randomUUID(),
+        'X-Auto-Response-Suppress': 'All',
+      },
     });
 
     console.log('[ADWETY MAIL SENT]', {
       to: maskDestination(payload.to),
       subject: payload.subject,
       messageId: info.messageId,
+      accepted: info.accepted,
+      rejected: info.rejected,
+      response: info.response,
       driver: env.mailDriver,
     });
 

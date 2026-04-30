@@ -53,7 +53,7 @@ function optionalAuth(req, _res, next) {
 function authorize(...allowedRoles) {
   const flatRoles = allowedRoles.flat();
   return (req, _res, next) => {
-    const role = req.authMeta?.role || req.authUser?.role || 'user';
+    const role = req.authUser?.role || req.authMeta?.role || 'user';
     if (!flatRoles.includes(role)) {
       return next(new AppError('Forbidden: insufficient permissions', 403));
     }

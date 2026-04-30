@@ -6,6 +6,22 @@ function getSessionStore() {
   return window.sessionStorage;
 }
 
+function sanitizeSession(session) {
+  if (!session || typeof session !== 'object') return null;
+  return {
+    id: session.id,
+    email: session.email,
+    name: session.name,
+    role: session.role,
+    accountType: session.accountType,
+    pharmacyName: session.pharmacyName || null,
+    demoMode: Boolean(session.demoMode),
+    emailVerified: Boolean(session.emailVerified),
+    phoneNumber: session.phoneNumber || '',
+    phoneVerified: Boolean(session.phoneVerified),
+  };
+}
+
 export function getStoredSession() {
   try {
     let raw = getSessionStore().getItem(SESSION_KEY);
@@ -19,7 +35,7 @@ export function getStoredSession() {
       clearStoredSession();
       return null;
     }
-    return parsed;
+    return sanitizeSession(parsed);
   } catch (_error) {
     clearStoredSession();
     return null;
@@ -27,10 +43,12 @@ export function getStoredSession() {
 }
 
 export function setStoredSession(session) {
-  getSessionStore().setItem(SESSION_KEY, JSON.stringify(session));
+  const safeSession = sanitizeSession(session);
+  if (!safeSession) return;
+  getSessionStore().setItem(SESSION_KEY, JSON.stringify(safeSession));
 }
 
 export function clearStoredSession() {
-  try { window.sessionStorage.removeItem(SESSION_KEY); } catch (_error) { /* ignore */ }
-  try { window.localStorage.removeItem(LEGACY_SESSION_KEY); } catch (_error) { /* ignore */ }
+  try { window.sessionStorage.removeItem(SESSION_KEY); } catch (_error) {}
+  try { window.localStorage.removeItem(LEGACY_SESSION_KEY); } catch (_error) {}
 }

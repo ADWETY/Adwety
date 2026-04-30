@@ -12,7 +12,7 @@ export default function LoginPage() {
   const { t, theme, toggleTheme, isRtl } = usePreferences();
   const toast = useToast();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: env.demoUsers.owner.email, password: '', role: 'owner' });
+  const [form, setForm] = useState({ email: '', password: '', role: 'owner' });
   const [otpState, setOtpState] = useState(null);
   const [otp, setOtp] = useState('');
   const [show, setShow] = useState(false);
@@ -58,6 +58,7 @@ export default function LoginPage() {
   }
 
   function demo(role) {
+    if (!env.enableDemoAuth) return;
     const user = env.demoUsers[role];
     setOtpState(null);
     setOtp('');
@@ -174,7 +175,7 @@ export default function LoginPage() {
             </form>
           )}
 
-          {!otpState ? (
+          {!otpState && env.enableDemoAuth ? (
             <>
               <div className="mt-6 grid gap-2">
                 <button className="btn-secondary" type="button" onClick={() => demo('owner')}>{t('actions.loginOwner')}</button>

@@ -90,7 +90,7 @@ async function createDemoInventoryIfEmpty() {
   return { drugs, pharmacies };
 }
 
-async function upsertAdmin({ fullName, email, password, role, phoneNumber = '' }) {
+async function upsertAdmin({ fullName, email, password, role, phoneNumber = '', pharmacyId = null }) {
   const passwordHash = await bcrypt.hash(password, env.bcryptSaltRounds);
   const userConflict = await User.findOne({ email });
   if (userConflict) throw new Error(`Seed email conflict: ${email} already exists as a user.`);
@@ -100,10 +100,14 @@ async function upsertAdmin({ fullName, email, password, role, phoneNumber = '' }
   }
   const existing = await Admin.findOne({ email });
   if (existing) {
+    if (role === 'pharmacy_admin' && pharmacyId && !existing.pharmacyId) {
+      existing.pharmacyId = pharmacyId;
+      await existing.save();
+    }
     console.log(`Admin exists: ${email} (${role})`);
     return existing;
   }
-  const admin = await Admin.create({ fullName, email, passwordHash, role, phoneNumber, isActive: true, isEmailVerified: true });
+  const admin = await Admin.create({ fullName, email, passwordHash, role, phoneNumber, pharmacyId, isActive: true, isEmailVerified: true });
   console.log(`Admin created: ${email} (${role})`);
   return admin;
 }
@@ -126,7 +130,8 @@ async function createAccountsFromEnv() {
   await upsertAdmin({ fullName: 'System Owner', email: env.seedOwnerEmail, password: env.seedOwnerPassword, role: 'owner', phoneNumber: '01099999999' });
   const user = await upsertUser({ fullName: 'Mona Ahmed', email: env.seedDemoUserEmail, password: env.seedDemoUserPassword, phoneNumber: '01000000000' });
   await upsertAdmin({ fullName: 'Super Admin', email: env.seedSuperAdminEmail, password: env.seedSuperAdminPassword, role: 'super_admin', phoneNumber: '01011111111' });
-  await upsertAdmin({ fullName: 'BlueCare Manager', email: env.seedPharmacyAdminEmail, password: env.seedPharmacyAdminPassword, role: 'pharmacy_admin', phoneNumber: '01022222222' });
+  const blueCare = await Pharmacy.findOne({ name: 'BlueCare Pharmacy' }).select('_id');
+  await upsertAdmin({ fullName: 'BlueCare Manager', email: env.seedPharmacyAdminEmail, password: env.seedPharmacyAdminPassword, role: 'pharmacy_admin', phoneNumber: '01022222222', pharmacyId: blueCare?._id || null });
   await upsertAdmin({ fullName: 'Support Admin', email: env.seedSupportAdminEmail, password: env.seedSupportAdminPassword, role: 'support_admin', phoneNumber: '01033333333' });
 
   const notificationCount = await Notification.countDocuments({ userId: user._id });

@@ -1,5 +1,4 @@
 import { env } from '../config/env';
-import { getStoredSession } from './storage';
 
 function getCookie(name) {
   const prefix = `${name}=`;
@@ -7,8 +6,7 @@ function getCookie(name) {
 }
 
 function getCsrfToken() {
-  const session = getStoredSession();
-  return session?.csrfToken || getCookie('adwety_csrf');
+  return getCookie('adwety_csrf');
 }
 
 async function apiRequest(path, options = {}) {
