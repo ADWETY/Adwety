@@ -7,7 +7,6 @@ const AuthContext = createContext(null);
 
 function inferFallbackRole(email, preferredRole) {
   if (preferredRole) return preferredRole;
-  if (email === env.demoUsers.owner?.email) return 'owner';
   if (email === env.demoUsers.super_admin.email) return 'super_admin';
   if (email === env.demoUsers.pharmacy_admin.email) return 'pharmacy_admin';
   if (email === env.demoUsers.support_admin.email) return 'support_admin';
@@ -15,18 +14,16 @@ function inferFallbackRole(email, preferredRole) {
 }
 
 function buildSession(payload, fallback = {}) {
-  const role = payload.role || inferFallbackRole(fallback.email, fallback.role);
   return {
-    id: payload.id || `${role || 'user'}-${Date.now()}`,
+    id: payload.id || `${fallback.role || 'user'}-${Date.now()}`,
     email: payload.email || fallback.email,
     name: payload.name || fallback.email,
-    role,
-    accountType: payload.account_type || (role === 'user' ? 'user' : 'admin'),
-    approvalStatus: payload.approval_status || (role === 'user' ? 'approved' : 'pending'),
-    pendingApproval: Boolean(payload.pending_approval),
-    pharmacyName: role === 'pharmacy_admin' ? env.demoUsers.pharmacy_admin.pharmacyName : null,
-    demoMode: !payload.token,
-    token: payload.token || null,
+    role: payload.role || inferFallbackRole(fallback.email, fallback.role),
+    accountType: payload.account_type || (fallback.role === 'user' ? 'user' : 'admin'),
+    pharmacyName: fallback.role === 'pharmacy_admin' ? env.demoUsers.pharmacy_admin.pharmacyName : null,
+    demoMode: Boolean(payload.demo_mode),
+    token: null,
+    csrfToken: payload.csrf_token || fallback.csrfToken || null,
     emailVerified: Boolean(payload.email_verified),
     phoneVerified: Boolean(payload.phone_verified),
   };
@@ -67,7 +64,6 @@ export function AuthProvider({ children }) {
           name: preset.name,
           role,
           token: null,
-          approval_status: 'approved',
         }, { email: preset.email, role });
         setSession(nextSession);
         setStoredSession(nextSession);
@@ -82,29 +78,24 @@ export function AuthProvider({ children }) {
       setStoredSession(nextSession);
       return nextSession;
     },
-    async register({ fullName, email, password, phoneNumber, role = 'user', pharmacy = null }) {
-      const isAdmin = role && role !== 'user';
+    async register({ fullName, email, password, phoneNumber }) {
       const result = await postJson('/auth/register', {
         full_name: fullName,
         email,
         password,
         phone_number: phoneNumber,
-        account_type: isAdmin ? 'admin' : 'user',
-        role,
-        pharmacy,
       });
       const payload = result?.data || {};
-      if (payload.requires_otp || payload.pending_approval) return { ...payload, email, role };
-      const nextSession = buildSession(payload, { email, role });
+      if (payload.requires_otp) return { ...payload, email, role: 'user' };
+      const nextSession = buildSession(payload, { email, role: 'user' });
       setSession(nextSession);
       setStoredSession(nextSession);
       return nextSession;
     },
-    async verifyRegisterOtp({ otpToken, otp, email, role }) {
+    async verifyRegisterOtp({ otpToken, otp, email }) {
       const result = await postJson('/auth/register/verify-otp', { otp_token: otpToken, otp });
       const payload = result?.data || {};
-      if (payload.pending_approval || !payload.token) return { ...payload, email, role };
-      const nextSession = buildSession(payload, { email, role });
+      const nextSession = buildSession(payload, { email, role: 'user' });
       setSession(nextSession);
       setStoredSession(nextSession);
       return nextSession;
@@ -122,6 +113,7 @@ export function AuthProvider({ children }) {
       return result?.data || {};
     },
     logout() {
+      postJson('/auth/logout', {}).catch(() => {});
       setSession(null);
       clearStoredSession();
     },

@@ -1,6 +1,7 @@
 const Pharmacy = require('../../../DB/Models/pharmacy.model');
 const Inventory = require('../../../DB/Models/inventory.model');
 const { AppError } = require('../../utils/error-handling');
+const { validateObjectId } = require('../../utils/helpers');
 const { stockStatusFromQuantity } = require('../medicines/medicines.service');
 const { escapeRegex } = require('../../utils/security');
 
@@ -49,6 +50,7 @@ async function listPharmacies({ featured, q, status } = {}) {
 }
 
 async function getPharmacyDetails(id) {
+  validateObjectId(id);
   const pharmacy = await Pharmacy.findById(id).lean();
   if (!pharmacy) throw new AppError('Pharmacy not found', 404);
   const inventory = await Inventory.find({ pharmacyId: pharmacy._id }).populate('drugId', 'name strength form description imageUrl').lean();
@@ -88,6 +90,7 @@ async function createPharmacy(payload) {
 }
 
 async function updatePharmacy(id, payload) {
+  validateObjectId(id);
   const pharmacy = await Pharmacy.findById(id);
   if (!pharmacy) throw new AppError('Pharmacy not found', 404);
   const mapping = {
@@ -107,6 +110,7 @@ async function updatePharmacy(id, payload) {
 }
 
 async function deletePharmacy(id) {
+  validateObjectId(id);
   const pharmacy = await Pharmacy.findById(id);
   if (!pharmacy) throw new AppError('Pharmacy not found', 404);
   await Inventory.deleteMany({ pharmacyId: pharmacy._id });

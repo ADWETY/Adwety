@@ -11,13 +11,13 @@ const items = [
   { to: '/medicines/new', labelKey: 'nav.addMedicine', icon: PlusCircle, roles: ['owner', 'super_admin', 'pharmacy_admin'] },
   { to: '/low-stock', labelKey: 'nav.lowStock', icon: PackageX, roles: ['owner', 'super_admin', 'pharmacy_admin'] },
   { to: '/pharmacies', labelKey: 'nav.pharmacies', icon: Building2, roles: ['owner', 'super_admin', 'pharmacy_admin'] },
-  { to: '/pharmacies/new', labelKey: 'nav.addPharmacy', icon: PlusCircle, roles: ['owner'] },
+  { to: '/pharmacies/new', labelKey: 'nav.addPharmacy', icon: PlusCircle, roles: ['owner', 'super_admin'] },
   { to: '/analytics', labelKey: 'nav.analytics', icon: BarChart3, roles: ['owner', 'super_admin', 'pharmacy_admin'] },
   { to: '/prescriptions', labelKey: 'nav.prescriptionScanner', icon: ScanSearch, roles: ['owner', 'super_admin', 'pharmacy_admin', 'user'] },
   { to: '/notifications', labelKey: 'nav.notifications', icon: Bell, roles: ['owner', 'super_admin', 'pharmacy_admin', 'support_admin'] },
-  { to: '/pharmacy-requests', labelKey: 'nav.pharmacyRequests', icon: ClipboardList, roles: ['owner'] },
+  { to: '/pharmacy-requests', labelKey: 'nav.pharmacyRequests', icon: ClipboardList, roles: ['owner', 'super_admin'] },
   { to: '/support-tickets', labelKey: 'nav.supportTickets', icon: Headphones, roles: ['owner', 'super_admin', 'support_admin'] },
-  { to: '/users', labelKey: 'nav.users', icon: Users, roles: ['owner'] },
+  { to: '/users', labelKey: 'nav.users', icon: Users, roles: ['owner', 'super_admin'] },
   { to: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['owner', 'super_admin', 'pharmacy_admin', 'support_admin', 'user'] },
 ];
 

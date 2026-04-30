@@ -1,46 +1,43 @@
 const { z } = require('zod');
+const { isValidObjectId } = require('../../utils/helpers');
 
 const statusSchema = z.enum(['pending', 'approved', 'rejected', 'active', 'inactive']);
+const objectIdSchema = z.string().refine(isValidObjectId, 'Invalid ObjectId format');
+const safeText = (min = 0, max = 2000) => z.string().min(min).max(max).refine((value) => !/<[^>]*>/g.test(value), 'HTML is not allowed');
+const safeUrl = z.string().url().refine((value) => ['http:', 'https:'].includes(new URL(value).protocol), 'Only HTTP/HTTPS URLs are allowed');
 
 const listSchema = z.object({
-  body: z.object({}).passthrough(),
+  body: z.object({}).strict(),
   query: z.object({
-    featured: z.string().optional(),
-    q: z.string().optional(),
+    featured: z.enum(['true', 'false']).optional(),
+    q: z.string().max(100).optional(),
     status: statusSchema.optional(),
-  }).passthrough(),
-  params: z.object({}).passthrough(),
+  }).strict(),
+  params: z.object({}).strict(),
 });
 
 const byIdSchema = z.object({
-  body: z.object({}).passthrough(),
-  query: z.object({}).passthrough(),
-  params: z.object({ id: z.string().min(1) }),
+  body: z.object({}).strict(),
+  query: z.object({}).strict(),
+  params: z.object({ id: objectIdSchema }),
 });
 
-const createSchema = z.object({
-  body: z.object({
-    name: z.string().min(2),
-    address: z.string().min(3),
-    phone: z.string().optional().default(''),
-    email: z.string().email().optional().or(z.literal('')).default(''),
-    working_hours: z.string().optional().default(''),
-    status: statusSchema.optional().default('active'),
-    rating: z.coerce.number().min(0).max(5).optional().default(0),
-    latitude: z.coerce.number().optional().default(30.0444),
-    longitude: z.coerce.number().optional().default(31.2357),
-    google_maps_url: z.string().optional().default(''),
-    is_featured: z.boolean().optional().default(false),
-    image_url: z.string().optional().nullable(),
-  }),
-  query: z.object({}).passthrough(),
-  params: z.object({}).passthrough(),
-});
+const createBody = z.object({
+  name: safeText(2, 200),
+  address: safeText(3, 500),
+  phone: z.string().max(32).optional().default(''),
+  email: z.string().email().optional().or(z.literal('')).default(''),
+  working_hours: safeText(0, 200).optional().default(''),
+  status: statusSchema.optional().default('active'),
+  rating: z.coerce.number().min(0).max(5).optional().default(0),
+  latitude: z.coerce.number().min(-90).max(90).optional().default(30.0444),
+  longitude: z.coerce.number().min(-180).max(180).optional().default(31.2357),
+  google_maps_url: safeUrl.optional().or(z.literal('')).default(''),
+  is_featured: z.boolean().optional().default(false),
+  image_url: safeUrl.optional().nullable(),
+}).strict();
 
-const updateSchema = z.object({
-  body: createSchema.shape.body.partial(),
-  query: z.object({}).passthrough(),
-  params: z.object({ id: z.string().min(1) }),
-});
+const createSchema = z.object({ body: createBody, query: z.object({}).strict(), params: z.object({}).strict() });
+const updateSchema = z.object({ body: createBody.partial().strict(), query: z.object({}).strict(), params: z.object({ id: objectIdSchema }) });
 
 module.exports = { listSchema, byIdSchema, createSchema, updateSchema };

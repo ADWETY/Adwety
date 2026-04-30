@@ -2,7 +2,7 @@ import { AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usePreferences } from '../context/PreferencesContext';
 
-export default function ConfirmDialog({ open, title, message, confirmText, cancelText, variant = 'danger', onConfirm, onClose, children }) {
+export default function ConfirmDialog({ open, title, message, confirmText, cancelText, variant = 'danger', onConfirm, onClose }) {
   const { t, isRtl } = usePreferences();
   if (!open) return null;
   const isDanger = variant === 'danger';
@@ -17,7 +17,6 @@ export default function ConfirmDialog({ open, title, message, confirmText, cance
           <div className="min-w-0 flex-1">
             <h3 className="text-xl font-semibold text-primary">{title}</h3>
             <p className="mt-2 text-sm text-muted">{message}</p>
-            {children}
           </div>
           <button type="button" className="btn-secondary !p-2" onClick={onClose}><X className="h-4 w-4" /></button>
         </div>

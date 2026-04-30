@@ -15,7 +15,8 @@ node_modules/
 uploads/
 public/uploads/
 
-
+# Local runtime/private data only
+private_uploads/
 
 # Logs
 logs/

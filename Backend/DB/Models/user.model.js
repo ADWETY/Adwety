@@ -9,6 +9,7 @@ const schema = withJsonTransform(new mongoose.Schema({
   isEmailVerified: { type: Boolean, default: false },
   isPhoneVerified: { type: Boolean, default: false },
   lastLoginAt: { type: Date, default: null },
+  passwordChangedAt: { type: Date, default: null },
 }, { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } }));
 schema.virtual('id').get(function () { return this._id.toString(); });
 module.exports = mongoose.model('User', schema);

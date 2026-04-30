@@ -39,7 +39,6 @@ function GuestRoute({ children }) {
   return children;
 }
 
-const ownerRoles = ['owner'];
 const superRoles = ['owner', 'super_admin'];
 const adminRoles = ['owner', 'super_admin', 'pharmacy_admin'];
 const supportRoles = ['owner', 'super_admin', 'support_admin'];
@@ -60,13 +59,13 @@ export default function App() {
         <Route path="medicines/new" element={<ProtectedRoute roles={adminRoles}><AddMedicinePage /></ProtectedRoute>} />
         <Route path="low-stock" element={<ProtectedRoute roles={adminRoles}><LowStockPage /></ProtectedRoute>} />
         <Route path="pharmacies" element={<ProtectedRoute roles={adminRoles}><PharmaciesPage /></ProtectedRoute>} />
-        <Route path="pharmacies/new" element={<ProtectedRoute roles={ownerRoles}><AddPharmacyPage /></ProtectedRoute>} />
+        <Route path="pharmacies/new" element={<ProtectedRoute roles={superRoles}><AddPharmacyPage /></ProtectedRoute>} />
         <Route path="pharmacies/:id" element={<ProtectedRoute roles={adminRoles}><PharmacyDetailsPage /></ProtectedRoute>} />
         <Route path="prescriptions" element={<ProtectedRoute roles={scannerRoles}><PrescriptionScannerPage /></ProtectedRoute>} />
         <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="pharmacy-requests" element={<ProtectedRoute roles={ownerRoles}><PharmacyRequestsPage /></ProtectedRoute>} />
+        <Route path="pharmacy-requests" element={<ProtectedRoute roles={superRoles}><PharmacyRequestsPage /></ProtectedRoute>} />
         <Route path="support-tickets" element={<ProtectedRoute roles={supportRoles}><SupportTicketsPage /></ProtectedRoute>} />
-        <Route path="users" element={<ProtectedRoute roles={ownerRoles}><UsersPage /></ProtectedRoute>} />
+        <Route path="users" element={<ProtectedRoute roles={superRoles}><UsersPage /></ProtectedRoute>} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>

@@ -10,7 +10,7 @@ const Pharmacy = require('../DB/Models/pharmacy.model');
 const Inventory = require('../DB/Models/inventory.model');
 const Notification = require('../DB/Models/notification.model');
 const OtpChallenge = require('../DB/Models/otp.model');
-const ApprovalRequest = require('../DB/Models/pharmacyrequest.model');
+const RateLimit = require('../DB/Models/ratelimit.model');
 
 const requiredPasswordMessage = `Missing seed password env variables.
 Set these in Backend/.env before running seed:
@@ -35,7 +35,7 @@ function requireSeedEnv() {
 
 async function clearCollections() {
   await Promise.all([
-    User.deleteMany({}), Admin.deleteMany({}), Category.deleteMany({}), Drug.deleteMany({}), Pharmacy.deleteMany({}), Inventory.deleteMany({}), Notification.deleteMany({}), OtpChallenge.deleteMany({}), ApprovalRequest.deleteMany({}),
+    User.deleteMany({}), Admin.deleteMany({}), Category.deleteMany({}), Drug.deleteMany({}), Pharmacy.deleteMany({}), Inventory.deleteMany({}), Notification.deleteMany({}), OtpChallenge.deleteMany({}), RateLimit.deleteMany({}),
   ]);
 }
 
@@ -90,26 +90,28 @@ async function createDemoInventoryIfEmpty() {
   return { drugs, pharmacies };
 }
 
-async function upsertAdmin({ fullName, email, password, role, phoneNumber = '', pharmacyId = null }) {
+async function upsertAdmin({ fullName, email, password, role, phoneNumber = '' }) {
   const passwordHash = await bcrypt.hash(password, env.bcryptSaltRounds);
+  const userConflict = await User.findOne({ email });
+  if (userConflict) throw new Error(`Seed email conflict: ${email} already exists as a user.`);
+  if (role === 'owner') {
+    const ownerExists = await Admin.findOne({ role: 'owner', email: { $ne: email } });
+    if (ownerExists) throw new Error('Cannot seed more than one owner account.');
+  }
   const existing = await Admin.findOne({ email });
   if (existing) {
-    existing.role = role;
-    existing.isActive = true;
-    existing.isEmailVerified = true;
-    existing.approvalStatus = 'approved';
-    existing.approvedAt = existing.approvedAt || new Date();
-    await existing.save();
-    console.log('Admin exists and was approved: ' + email + ' (' + role + ')');
+    console.log(`Admin exists: ${email} (${role})`);
     return existing;
   }
-  const admin = await Admin.create({ fullName, email, passwordHash, role, phoneNumber, pharmacyId, isActive: true, isEmailVerified: true, approvalStatus: 'approved', approvedAt: new Date() });
+  const admin = await Admin.create({ fullName, email, passwordHash, role, phoneNumber, isActive: true, isEmailVerified: true });
   console.log(`Admin created: ${email} (${role})`);
   return admin;
 }
 
 async function upsertUser({ fullName, email, password, phoneNumber = '' }) {
   const passwordHash = await bcrypt.hash(password, env.bcryptSaltRounds);
+  const adminConflict = await Admin.findOne({ email });
+  if (adminConflict) throw new Error(`Seed email conflict: ${email} already exists as an admin.`);
   const existing = await User.findOne({ email });
   if (existing) {
     console.log(`User exists: ${email}`);
@@ -121,8 +123,8 @@ async function upsertUser({ fullName, email, password, phoneNumber = '' }) {
 }
 
 async function createAccountsFromEnv() {
-  const user = await upsertUser({ fullName: 'Mona Ahmed', email: env.seedDemoUserEmail, password: env.seedDemoUserPassword, phoneNumber: '01000000000' });
   await upsertAdmin({ fullName: 'System Owner', email: env.seedOwnerEmail, password: env.seedOwnerPassword, role: 'owner', phoneNumber: '01099999999' });
+  const user = await upsertUser({ fullName: 'Mona Ahmed', email: env.seedDemoUserEmail, password: env.seedDemoUserPassword, phoneNumber: '01000000000' });
   await upsertAdmin({ fullName: 'Super Admin', email: env.seedSuperAdminEmail, password: env.seedSuperAdminPassword, role: 'super_admin', phoneNumber: '01011111111' });
   await upsertAdmin({ fullName: 'BlueCare Manager', email: env.seedPharmacyAdminEmail, password: env.seedPharmacyAdminPassword, role: 'pharmacy_admin', phoneNumber: '01022222222' });
   await upsertAdmin({ fullName: 'Support Admin', email: env.seedSupportAdminEmail, password: env.seedSupportAdminPassword, role: 'support_admin', phoneNumber: '01033333333' });

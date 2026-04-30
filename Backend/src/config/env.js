@@ -1,4 +1,5 @@
 const path = require('path');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 
 dotenv.config({ path: path.join(process.cwd(), '.env') });
@@ -15,8 +16,11 @@ function parseOrigins(value) {
 }
 
 function isWeakSecret(secret) {
-  return !secret || secret.length < 32 || ['change-me', 'replace_with_a_long_random_secret', 'secret', 'jwt_secret'].includes(secret);
+  return !secret || secret.length < 64 || ['change-me', 'replace_with_a_long_random_secret', 'secret', 'jwt_secret'].includes(secret);
 }
+
+const providedJwtSecret = process.env.JWT_SECRET || '';
+const runtimeJwtSecret = providedJwtSecret || crypto.randomBytes(64).toString('hex');
 
 const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -26,8 +30,13 @@ const env = {
   frontendBaseUrl: process.env.FRONTEND_BASE_URL || 'http://localhost:6501',
   frontendPublicUrl: process.env.FRONTEND_PUBLIC_URL || 'http://127.0.0.1:6501',
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
-  jwtSecret: process.env.JWT_SECRET || 'dev-only-adwety-jwt-secret-change-before-production-64chars',
+  allowNoOriginRequests: parseBoolean(process.env.CORS_ALLOW_NO_ORIGIN, false),
+  jwtSecret: runtimeJwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '2h',
+  authCookieName: process.env.AUTH_COOKIE_NAME || 'adwety_auth',
+  csrfCookieName: process.env.CSRF_COOKIE_NAME || 'adwety_csrf',
+  cookieSecure: parseBoolean(process.env.COOKIE_SECURE, (process.env.NODE_ENV || 'development') === 'production'),
+  cookieSameSite: process.env.COOKIE_SAME_SITE || 'strict',
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS || 12),
   uploadDir: process.env.UPLOAD_DIR || 'private_uploads',
   maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 5),
@@ -66,8 +75,15 @@ const env = {
   seedDemoUserPassword: process.env.SEED_DEMO_USER_PASSWORD || '',
 };
 
-if (env.nodeEnv === 'production' && isWeakSecret(env.jwtSecret)) {
-  throw new Error('Security error: JWT_SECRET must be at least 32 characters and not a placeholder in production.');
+if (!providedJwtSecret) {
+  console.warn('[SECURITY WARNING] JWT_SECRET is not set. A random runtime secret was generated. Set JWT_SECRET in .env for stable sessions.');
+}
+
+if (isWeakSecret(env.jwtSecret)) {
+  if (env.nodeEnv === 'production') {
+    throw new Error('Security error: JWT_SECRET must be at least 64 characters and not a placeholder in production.');
+  }
+  console.warn('[SECURITY WARNING] JWT_SECRET is shorter than recommended. Generate one with: openssl rand -hex 64');
 }
 
 if (env.nodeEnv === 'production' && env.enableDemoAuth) {

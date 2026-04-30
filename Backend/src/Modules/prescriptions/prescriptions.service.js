@@ -3,10 +3,12 @@ const PrescriptionExtractedDrug = require('../../../DB/Models/prescriptionextrac
 const { saveBuffer } = require('../../services/storage.service');
 const { extractPrescription } = require('../../services/ai/ai.service');
 const { AppError } = require('../../utils/error-handling');
+const { validateUploadedFileContent } = require('../../middleware/upload');
 
 async function scanPrescription({ file, userId, mockText }) {
   if (!userId) throw new AppError('Unauthorized', 401);
   if (!file && !mockText) throw new AppError('Prescription image/PDF or mock_text is required', 422);
+  if (file?.buffer) validateUploadedFileContent(file);
 
   const imageUrl = file?.buffer ? saveBuffer(file.buffer, file.originalname) : null;
   const prescription = await Prescription.create({

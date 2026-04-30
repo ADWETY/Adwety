@@ -1,19 +1,30 @@
 import { env } from '../config/env';
 import { getStoredSession } from './storage';
 
-async function apiRequest(path, options = {}) {
+function getCookie(name) {
+  const prefix = `${name}=`;
+  return document.cookie.split(';').map((item) => item.trim()).find((item) => item.startsWith(prefix))?.slice(prefix.length) || '';
+}
+
+function getCsrfToken() {
   const session = getStoredSession();
+  return session?.csrfToken || getCookie('adwety_csrf');
+}
+
+async function apiRequest(path, options = {}) {
   const headers = {
     Accept: 'application/json',
     ...(options.headers || {}),
   };
 
-  if (session?.token) {
-    headers.Authorization = `Bearer ${session.token}`;
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(options.method || 'GET').toUpperCase())) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
   }
 
   const response = await fetch(`${env.apiBaseUrl}${path}`, {
     ...options,
+    credentials: 'include',
     headers,
   });
   const data = await response.json().catch(() => ({}));
@@ -40,14 +51,6 @@ export function postJson(path, body) {
 export function putJson(path, body) {
   return apiRequest(path, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-}
-
-export function patchJson(path, body) {
-  return apiRequest(path, {
-    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });

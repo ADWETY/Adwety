@@ -1,6 +1,6 @@
 const SESSION_KEY = 'adwety_dashboard_session';
 const LEGACY_SESSION_KEY = 'adwety_dashboard_session';
-const VALID_ROLES = ['super_admin', 'pharmacy_admin', 'support_admin', 'user'];
+const VALID_ROLES = ['owner', 'super_admin', 'pharmacy_admin', 'support_admin', 'user'];
 
 function getSessionStore() {
   return window.sessionStorage;

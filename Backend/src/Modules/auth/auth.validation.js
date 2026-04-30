@@ -15,21 +15,9 @@ const registerSchema = z.object({
     email: z.string().email().max(254),
     password: passwordSchema,
     phone_number: z.string().max(32).optional(),
-    account_type: z.enum(['user', 'admin']).optional(),
-    role: z.enum(['user', 'owner', 'super_admin', 'pharmacy_admin', 'support_admin']).optional(),
-    pharmacy: z.object({
-      name: z.string().min(2).max(160).optional(),
-      address: z.string().min(2).max(300).optional(),
-      phone: z.string().max(32).optional(),
-      email: z.string().email().max(254).optional().or(z.literal('')),
-      working_hours: z.string().max(160).optional(),
-      google_maps_url: z.string().url().max(600).optional().or(z.literal('')),
-      latitude: z.coerce.number().optional(),
-      longitude: z.coerce.number().optional(),
-    }).optional(),
   }),
-  query: z.object({}).passthrough(),
-  params: z.object({}).passthrough(),
+  query: z.object({}).strict(),
+  params: z.object({}).strict(),
 });
 
 const verifyOtpSchema = z.object({
@@ -37,8 +25,8 @@ const verifyOtpSchema = z.object({
     otp_token: otpTokenSchema,
     otp: otpSchema,
   }),
-  query: z.object({}).passthrough(),
-  params: z.object({}).passthrough(),
+  query: z.object({}).strict(),
+  params: z.object({}).strict(),
 });
 
 const loginSchema = z.object({
@@ -46,14 +34,14 @@ const loginSchema = z.object({
     email: z.string().email().max(254),
     password: z.string().min(1).max(256),
   }),
-  query: z.object({}).passthrough(),
-  params: z.object({}).passthrough(),
+  query: z.object({}).strict(),
+  params: z.object({}).strict(),
 });
 
 const forgotPasswordSchema = z.object({
   body: z.object({ email: z.string().email().max(254) }),
-  query: z.object({}).passthrough(),
-  params: z.object({}).passthrough(),
+  query: z.object({}).strict(),
+  params: z.object({}).strict(),
 });
 
 const resetPasswordSchema = z.object({
@@ -62,8 +50,8 @@ const resetPasswordSchema = z.object({
     otp: otpSchema,
     new_password: passwordSchema,
   }),
-  query: z.object({}).passthrough(),
-  params: z.object({}).passthrough(),
+  query: z.object({}).strict(),
+  params: z.object({}).strict(),
 });
 
 module.exports = {

@@ -7,7 +7,7 @@ const connectDatabase = require('./DB/connection');
 const env = require('./src/config/env');
 const registerRoutes = require('./src/Modules');
 const { notFoundHandler, globalErrorHandler } = require('./src/utils/error-handling');
-const { corsOptions, apiLimiter, sanitizeRequest } = require('./src/middleware/security');
+const { corsOptions, apiLimiter, sanitizeRequest, parseCookies, csrfProtection } = require('./src/middleware/security');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -21,7 +21,9 @@ app.use(cors(corsOptions()));
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(parseCookies);
 app.use(sanitizeRequest);
+app.use(csrfProtection);
 app.use('/api/v1', apiLimiter);
 
 app.get('/health', (_req, res) => {

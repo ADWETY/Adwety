@@ -1,5 +1,6 @@
 const User = require('../../DB/Models/user.model');
 const Admin = require('../../DB/Models/admin.model');
+const env = require('../config/env');
 const { verifyToken } = require('../services/token.service');
 const { AppError } = require('../utils/error-handling');
 
@@ -8,16 +9,31 @@ async function resolveAccount(payload) {
   return User.findById(payload.sub).select('+passwordHash');
 }
 
+function readToken(req) {
+  const header = req.headers.authorization || '';
+  if (header.startsWith('Bearer ')) return header.slice(7);
+  return req.cookies?.[env.authCookieName] || '';
+}
+
+function assertTokenNotRevoked(payload, account) {
+  if (!account.passwordChangedAt || !payload.iat) return;
+  const changedAtSeconds = Math.floor(new Date(account.passwordChangedAt).getTime() / 1000);
+  if (payload.iat < changedAtSeconds) {
+    throw new AppError('Password recently changed. Please log in again.', 401);
+  }
+}
+
 async function auth(req, _res, next) {
   try {
-    const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const token = readToken(req);
     if (!token) throw new AppError('Unauthorized', 401);
 
     const payload = verifyToken(token);
     const account = await resolveAccount(payload);
 
     if (!account || account.isActive === false) throw new AppError('Unauthorized', 401);
+    assertTokenNotRevoked(payload, account);
+
     req.authUser = account;
     req.authMeta = payload;
     next();
@@ -28,7 +44,9 @@ async function auth(req, _res, next) {
 
 function optionalAuth(req, _res, next) {
   const header = req.headers.authorization || '';
-  if (!header.startsWith('Bearer ')) return next();
+  const hasHeaderToken = header.startsWith('Bearer ');
+  const hasCookieToken = Boolean(req.cookies?.[env.authCookieName]);
+  if (!hasHeaderToken && !hasCookieToken) return next();
   return auth(req, _res, next);
 }
 

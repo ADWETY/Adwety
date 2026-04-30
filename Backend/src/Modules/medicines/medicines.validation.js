@@ -1,57 +1,61 @@
 const { z } = require('zod');
+const { isValidObjectId } = require('../../utils/helpers');
 
 const stockStatus = z.enum(['in_stock', 'low_stock', 'out_of_stock', 'unknown']).optional();
+const objectIdSchema = z.string().refine(isValidObjectId, 'Invalid ObjectId format');
+const safeText = (min = 0, max = 2000) => z.string().min(min).max(max).refine((value) => !/<[^>]*>/g.test(value), 'HTML is not allowed');
+const safeUrl = z.string().url().refine((value) => ['http:', 'https:'].includes(new URL(value).protocol), 'Only HTTP/HTTPS URLs are allowed');
 
 const listSchema = z.object({
-  body: z.object({}).passthrough(),
+  body: z.object({}).strict(),
   query: z.object({
-    q: z.string().optional(),
+    q: z.string().max(100).optional(),
     page: z.string().optional(),
     limit: z.string().optional(),
-    category: z.string().optional(),
-    pharmacy_id: z.string().optional(),
+    category: z.string().max(100).optional(),
+    pharmacy_id: objectIdSchema.optional(),
     stock_status: stockStatus,
-  }).passthrough(),
-  params: z.object({}).passthrough(),
+  }).strict(),
+  params: z.object({}).strict(),
 });
 
 const byIdSchema = z.object({
-  body: z.object({}).passthrough(),
-  query: z.object({ inventory_id: z.string().optional() }).passthrough(),
-  params: z.object({ id: z.string().min(1) }),
+  body: z.object({}).strict(),
+  query: z.object({ inventory_id: objectIdSchema.optional() }).strict(),
+  params: z.object({ id: objectIdSchema }),
 });
 
 const createSchema = z.object({
   body: z.object({
-    name: z.string().min(2),
-    category: z.string().min(2),
-    strength: z.string().min(1),
-    form: z.string().min(1),
-    price: z.coerce.number().min(0),
-    quantity: z.coerce.number().min(0),
-    pharmacy_id: z.string().min(1),
-    description: z.string().optional().default(''),
-    image_url: z.string().optional().nullable(),
-  }),
-  query: z.object({}).passthrough(),
-  params: z.object({}).passthrough(),
+    name: safeText(2, 200),
+    category: safeText(2, 100),
+    strength: safeText(1, 100),
+    form: safeText(1, 100),
+    price: z.coerce.number().min(0).max(999999),
+    quantity: z.coerce.number().min(0).max(999999),
+    pharmacy_id: objectIdSchema,
+    description: safeText(0, 2000).optional().default(''),
+    image_url: safeUrl.optional().nullable(),
+  }).strict(),
+  query: z.object({}).strict(),
+  params: z.object({}).strict(),
 });
 
 const updateSchema = z.object({
   body: z.object({
-    inventory_id: z.string().optional().nullable(),
-    name: z.string().min(2).optional(),
-    category: z.string().min(2).optional(),
-    strength: z.string().min(1).optional(),
-    form: z.string().min(1).optional(),
-    price: z.coerce.number().min(0).optional(),
-    quantity: z.coerce.number().min(0).optional(),
-    pharmacy_id: z.string().optional().nullable(),
-    description: z.string().optional(),
-    image_url: z.string().optional().nullable(),
-  }).passthrough(),
-  query: z.object({}).passthrough(),
-  params: z.object({ id: z.string().min(1) }),
+    inventory_id: objectIdSchema.optional().nullable(),
+    name: safeText(2, 200).optional(),
+    category: safeText(2, 100).optional(),
+    strength: safeText(1, 100).optional(),
+    form: safeText(1, 100).optional(),
+    price: z.coerce.number().min(0).max(999999).optional(),
+    quantity: z.coerce.number().min(0).max(999999).optional(),
+    pharmacy_id: objectIdSchema.optional().nullable(),
+    description: safeText(0, 2000).optional(),
+    image_url: safeUrl.optional().nullable(),
+  }).strict(),
+  query: z.object({}).strict(),
+  params: z.object({ id: objectIdSchema }),
 });
 
 module.exports = { listSchema, byIdSchema, createSchema, updateSchema };

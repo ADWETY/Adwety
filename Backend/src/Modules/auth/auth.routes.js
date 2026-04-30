@@ -16,5 +16,6 @@ router.post('/login', authLimiter, validate(loginSchema), controller.login);
 router.post('/login/verify-otp', authLimiter, validate(verifyOtpSchema), controller.verifyLoginOtp);
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), controller.forgotPassword);
 router.post('/reset-password', authLimiter, validate(resetPasswordSchema), controller.resetPassword);
+router.post('/logout', controller.logout);
 
 module.exports = router;

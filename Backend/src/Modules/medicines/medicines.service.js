@@ -4,7 +4,7 @@ const Inventory = require('../../../DB/Models/inventory.model');
 const Pharmacy = require('../../../DB/Models/pharmacy.model');
 const SearchHistory = require('../../../DB/Models/searchhistory.model');
 const { AppError } = require('../../utils/error-handling');
-const { makePagination } = require('../../utils/helpers');
+const { makePagination, validateObjectId } = require('../../utils/helpers');
 const { escapeRegex } = require('../../utils/security');
 
 function stockStatusFromQuantity(quantity) {
@@ -81,6 +81,7 @@ async function listMedicines({ q = '', page = 1, limit = 50, category, pharmacy_
 }
 
 async function getMedicineById(id) {
+  validateObjectId(id);
   const drug = await Drug.findById(id).populate('categoryId', 'name').lean();
   if (!drug) throw new AppError('Medicine not found', 404);
   const inventory = await Inventory.find({ drugId: drug._id }).populate('pharmacyId', 'name address latitude longitude rating imageUrl').lean();
@@ -108,6 +109,7 @@ async function getMedicineById(id) {
 }
 
 async function createMedicine(payload) {
+  validateObjectId(payload.pharmacy_id, 'pharmacy_id');
   const category = await ensureCategory(payload.category);
   const pharmacy = await Pharmacy.findById(payload.pharmacy_id);
   if (!pharmacy) throw new AppError('Selected pharmacy was not found', 404);
@@ -135,6 +137,9 @@ async function createMedicine(payload) {
 }
 
 async function updateMedicine(id, payload) {
+  validateObjectId(id);
+  if (payload.inventory_id) validateObjectId(payload.inventory_id, 'inventory_id');
+  if (payload.pharmacy_id) validateObjectId(payload.pharmacy_id, 'pharmacy_id');
   const drug = await Drug.findById(id);
   if (!drug) throw new AppError('Medicine not found', 404);
 
@@ -168,6 +173,8 @@ async function updateMedicine(id, payload) {
 }
 
 async function deleteMedicine(id, { inventory_id } = {}) {
+  validateObjectId(id);
+  if (inventory_id) validateObjectId(inventory_id, 'inventory_id');
   const drug = await Drug.findById(id);
   if (!drug) throw new AppError('Medicine not found', 404);
 

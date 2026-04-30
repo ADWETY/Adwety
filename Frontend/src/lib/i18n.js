@@ -309,7 +309,7 @@ const securityPatchTranslations = {
       featureInventory: 'Medicine Inventory', featurePharmacies: 'Pharmacy Management', featureAlerts: 'Stock Alerts', featureAnalytics: 'Analytics', featureLanguages: 'Multi-language Dashboard'
     },
     actions: {
-      login: 'Login', register: 'Create account', rememberMe: 'Remember me', loginSuper: 'Login as Super Admin', loginPharmacy: 'Login as Pharmacy Admin', loginSupport: 'Login as Support Admin',
+      login: 'Login', loginOwner: 'Login as Owner', register: 'Create account', rememberMe: 'Remember me', loginSuper: 'Login as Super Admin', loginPharmacy: 'Login as Pharmacy Admin', loginSupport: 'Login as Support Admin',
       retry: 'Retry', approve: 'Approve', reject: 'Reject', review: 'Review', changeRole: 'Change role', scanPrescription: 'Scan Prescription', viewLowStock: 'View Low Stock', openAnalytics: 'Open Analytics', getStarted: 'Get Started'
     },
     common: {
@@ -342,7 +342,7 @@ const securityPatchTranslations = {
       featureInventory: 'إدارة مخزون الأدوية', featurePharmacies: 'إدارة الصيدليات', featureAlerts: 'تنبيهات المخزون', featureAnalytics: 'التحليلات', featureLanguages: 'لوحة متعددة اللغات'
     },
     actions: {
-      login: 'تسجيل الدخول', register: 'إنشاء حساب', rememberMe: 'تذكرني', loginSuper: 'الدخول كمدير عام', loginPharmacy: 'الدخول كمدير صيدلية', loginSupport: 'الدخول كمسؤول دعم',
+      login: 'تسجيل الدخول', loginOwner: 'الدخول كمالك النظام', register: 'إنشاء حساب', rememberMe: 'تذكرني', loginSuper: 'الدخول كمدير عام', loginPharmacy: 'الدخول كمدير صيدلية', loginSupport: 'الدخول كمسؤول دعم',
       retry: 'إعادة المحاولة', approve: 'قبول', reject: 'رفض', review: 'مراجعة', changeRole: 'تغيير الدور', scanPrescription: 'مسح روشتة', viewLowStock: 'عرض المخزون المنخفض', openAnalytics: 'فتح التحليلات', getStarted: 'ابدأ الآن'
     },
     common: {
@@ -476,72 +476,3 @@ deepMerge(translations.ar, otpAndFullArabicPatchTranslations.ar);
 
 deepMerge(translations.en, { notFound: { title: 'Page not found', description: 'The page you requested does not exist in ADWETY Dashboard.', back: 'Back to dashboard' } });
 deepMerge(translations.ar, { notFound: { title: 'الصفحة غير موجودة', description: 'الصفحة المطلوبة غير موجودة داخل لوحة ADWETY.', back: 'العودة للوحة التحكم' } });
-
-deepMerge(translations.en, {
-  roles: {
-    owner: 'Owner',
-    super_admin: 'Super Admin',
-    pharmacy_admin: 'Pharmacy Admin',
-    support_admin: 'Support Admin',
-    user: 'User',
-  },
-  auth: {
-    adminRegisterNotice: 'Admin accounts are verified by OTP first, then remain pending until the Owner approves them.',
-    pendingOwnerApproval: 'Pending Owner approval',
-    pendingOwnerApprovalDescription: 'Your email has been verified. The Owner must review and approve your request before you can log in.',
-    requestSubmitted: 'Request submitted',
-    pharmacyRegistrationData: 'Pharmacy registration data',
-    pharmacyDataRequired: 'Pharmacy name and address are required for pharmacy admin registration.',
-    ownerOnlyApproval: 'Only the Owner can approve or reject account requests.',
-  },
-  actions: {
-    approve: 'Approve',
-    reject: 'Reject',
-    review: 'Review',
-    changeRole: 'Change Role',
-  },
-  common: {
-    requestedRole: 'Requested role',
-    requestType: 'Request type',
-    pending: 'Pending',
-    approved: 'Approved',
-    rejected: 'Rejected',
-    rejectionReason: 'Rejection reason',
-  },
-});
-
-deepMerge(translations.ar, {
-  roles: {
-    owner: 'المالك',
-    super_admin: 'مدير عام',
-    pharmacy_admin: 'مدير صيدلية',
-    support_admin: 'مسؤول دعم',
-    user: 'مستخدم',
-  },
-  auth: {
-    adminRegisterNotice: 'حسابات الإدارة يتم تأكيدها بالـ OTP أولًا، ثم تظل معلقة حتى يعتمدها المالك.',
-    pendingOwnerApproval: 'في انتظار موافقة المالك',
-    pendingOwnerApprovalDescription: 'تم تأكيد البريد الإلكتروني بنجاح. يجب على المالك مراجعة الطلب والموافقة عليه قبل تسجيل الدخول.',
-    requestSubmitted: 'تم إرسال الطلب',
-    pharmacyRegistrationData: 'بيانات تسجيل الصيدلية',
-    pharmacyDataRequired: 'اسم الصيدلية والعنوان مطلوبان عند تسجيل مدير صيدلية.',
-    ownerOnlyApproval: 'المالك فقط يمكنه قبول أو رفض طلبات الحسابات.',
-  },
-  actions: {
-    approve: 'قبول',
-    reject: 'رفض',
-    review: 'مراجعة',
-    changeRole: 'تغيير الدور',
-  },
-  common: {
-    requestedRole: 'الدور المطلوب',
-    requestType: 'نوع الطلب',
-    pending: 'معلق',
-    approved: 'مقبول',
-    rejected: 'مرفوض',
-    rejectionReason: 'سبب الرفض',
-  },
-});
-
-deepMerge(translations.en, { actions: { loginOwner: 'Login as Owner' } });
-deepMerge(translations.ar, { actions: { loginOwner: 'الدخول كمالك النظام' } });

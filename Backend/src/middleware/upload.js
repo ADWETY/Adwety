@@ -14,8 +14,31 @@ function fileFilter(_req, file, callback) {
   return callback(null, true);
 }
 
-module.exports = multer({
+function detectMimeFromMagicBytes(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return null;
+  if (buffer.slice(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'image/jpeg';
+  if (buffer.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buffer.slice(0, 4).toString('ascii') === '%PDF') return 'application/pdf';
+  if (buffer.slice(0, 4).toString('ascii') === 'RIFF' && buffer.slice(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  return null;
+}
+
+function validateUploadedFileContent(file) {
+  if (!file?.buffer) return;
+  const detected = detectMimeFromMagicBytes(file.buffer);
+  if (!detected || !allowedMimeTypes.has(detected)) {
+    throw new AppError('File content does not match an allowed image/PDF type.', 415);
+  }
+  if (detected !== file.mimetype) {
+    throw new AppError('MIME type mismatch detected.', 415);
+  }
+}
+
+const upload = multer({
   storage: multer.memoryStorage(),
   limits: { files: 1, fileSize: env.maxFileSizeMb * 1024 * 1024 },
   fileFilter,
 });
+
+upload.validateUploadedFileContent = validateUploadedFileContent;
+module.exports = upload;
