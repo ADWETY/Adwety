@@ -1,0 +1,63 @@
+const { z } = require('zod');
+
+const passwordSchema = z.string()
+  .min(10, 'Password must be at least 10 characters')
+  .regex(/[A-Z]/, 'Password must include an uppercase letter')
+  .regex(/[a-z]/, 'Password must include a lowercase letter')
+  .regex(/[0-9]/, 'Password must include a number');
+
+const otpSchema = z.string().min(4).max(10).regex(/^[0-9]+$/, 'OTP must be numeric');
+const otpTokenSchema = z.string().min(32).max(256);
+
+const registerSchema = z.object({
+  body: z.object({
+    full_name: z.string().min(2).max(100),
+    email: z.string().email().max(254),
+    password: passwordSchema,
+    phone_number: z.string().max(32).optional(),
+  }),
+  query: z.object({}).passthrough(),
+  params: z.object({}).passthrough(),
+});
+
+const verifyOtpSchema = z.object({
+  body: z.object({
+    otp_token: otpTokenSchema,
+    otp: otpSchema,
+  }),
+  query: z.object({}).passthrough(),
+  params: z.object({}).passthrough(),
+});
+
+const loginSchema = z.object({
+  body: z.object({
+    email: z.string().email().max(254),
+    password: z.string().min(1).max(256),
+  }),
+  query: z.object({}).passthrough(),
+  params: z.object({}).passthrough(),
+});
+
+const forgotPasswordSchema = z.object({
+  body: z.object({ email: z.string().email().max(254) }),
+  query: z.object({}).passthrough(),
+  params: z.object({}).passthrough(),
+});
+
+const resetPasswordSchema = z.object({
+  body: z.object({
+    otp_token: otpTokenSchema,
+    otp: otpSchema,
+    new_password: passwordSchema,
+  }),
+  query: z.object({}).passthrough(),
+  params: z.object({}).passthrough(),
+});
+
+module.exports = {
+  registerSchema,
+  loginSchema,
+  forgotPasswordSchema,
+  verifyOtpSchema,
+  resetPasswordSchema,
+};

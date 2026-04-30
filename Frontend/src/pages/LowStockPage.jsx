@@ -1,0 +1,25 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { AlertTriangle, Bell, Eye, Pencil, Search } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
+import StatCard from '../components/StatCard';
+import { useToast } from '../context/ToastContext';
+import { usePreferences } from '../context/PreferencesContext';
+import { getJson } from '../lib/api';
+import { demoMedicines, demoPharmacies } from '../lib/demoData';
+import { stockStatus, stockTone } from '../lib/utils';
+
+export default function LowStockPage() {
+  const { t } = usePreferences();
+  const toast = useToast();
+  const [rows, setRows] = useState(demoMedicines);
+  const [query, setQuery] = useState('');
+  const [pharmacy, setPharmacy] = useState('');
+  const [category, setCategory] = useState('');
+  const [status, setStatus] = useState('');
+  useEffect(() => { async function load() { try { const result = await getJson('/medicines'); setRows(result.data || demoMedicines); } catch (_error) { setRows(demoMedicines); } } load(); }, []);
+  const lowRows = useMemo(() => rows.filter((item) => Number(item.quantity || 0) < 10).filter((item) => { const text = `${item.name} ${item.category} ${item.pharmacy_name}`.toLowerCase(); if (query && !text.includes(query.toLowerCase())) return false; if (pharmacy && item.pharmacy_id !== pharmacy) return false; if (category && item.category !== category) return false; if (status && stockStatus(item.quantity) !== status) return false; return true; }), [rows, query, pharmacy, category, status]);
+  const categories = Array.from(new Set(rows.map((item) => item.category).filter(Boolean)));
+  const affected = new Set(lowRows.map((item) => item.pharmacy_id || item.pharmacy_name)).size;
+  return <div className="space-y-6"><section className="grid gap-4 md:grid-cols-3"><StatCard label={t('dashboard.lowStock')} value={lowRows.filter((item) => stockStatus(item.quantity) === 'low_stock').length} icon={AlertTriangle} /><StatCard label={t('dashboard.outOfStock')} value={lowRows.filter((item) => stockStatus(item.quantity) === 'out_of_stock').length} icon={AlertTriangle} /><StatCard label={t('common.affectedPharmacies')} value={affected} icon={Bell} /></section><section className="card p-6"><div className="grid gap-4 md:grid-cols-4"><div><label className="label">{t('actions.search')}</label><div className="relative"><Search className="pointer-events-none absolute start-4 top-3.5 h-4 w-4 text-soft" /><input className="input ps-11" value={query} onChange={(e) => setQuery(e.target.value)} /></div></div><div><label className="label">{t('common.pharmacy')}</label><select className="input" value={pharmacy} onChange={(e) => setPharmacy(e.target.value)}><option value="">{t('common.all')}</option>{demoPharmacies.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div><div><label className="label">{t('common.category')}</label><select className="input" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">{t('common.all')}</option>{categories.map((item) => <option key={item}>{item}</option>)}</select></div><div><label className="label">{t('common.status')}</label><select className="input" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">{t('common.all')}</option><option value="low_stock">{t('stock.low_stock')}</option><option value="out_of_stock">{t('stock.out_of_stock')}</option></select></div></div></section><section className="card overflow-hidden"><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="table-head"><tr><th className="px-5 py-4 font-medium">{t('common.medicine')}</th><th className="px-5 py-4 font-medium">{t('common.pharmacy')}</th><th className="px-5 py-4 font-medium">{t('common.category')}</th><th className="px-5 py-4 font-medium">{t('common.quantity')}</th><th className="px-5 py-4 font-medium">{t('common.status')}</th><th className="px-5 py-4 font-medium">{t('common.recommendedAction')}</th></tr></thead><tbody>{lowRows.length ? lowRows.map((item) => <tr key={item.inventory_id || item.id} className="border-b border-soft"><td className="px-5 py-4 font-medium text-primary">{item.name}</td><td className="px-5 py-4 text-muted">{item.pharmacy_name}</td><td className="px-5 py-4 text-muted">{item.category}</td><td className="px-5 py-4 text-muted">{item.quantity}</td><td className="px-5 py-4"><span className={`badge ${stockTone(item.quantity)}`}>{t(`stock.${stockStatus(item.quantity)}`)}</span></td><td className="px-5 py-4"><div className="flex flex-wrap gap-2"><Link className="btn-secondary !px-3 !py-2" to="/medicines"><Eye className="h-4 w-4" /></Link><Link className="btn-secondary !px-3 !py-2" to="/medicines"><Pencil className="h-4 w-4" /></Link><button className="btn-primary !px-3 !py-2" onClick={() => toast.info(t('actions.notifyPharmacy'))}><Bell className="h-4 w-4" /></button></div></td></tr>) : <tr><td colSpan="6" className="px-5 py-8"><EmptyState title={t('common.noData')} /></td></tr>}</tbody></table></div></section></div>;
+}

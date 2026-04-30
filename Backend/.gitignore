@@ -1,0 +1,47 @@
+# =========================
+# ADWETY Backend .gitignore
+# Place this file inside Backend folder
+# =========================
+
+# Dependencies
+node_modules/
+
+# Environment files - keep real secrets local only
+.env
+.env.*
+!.env.example
+
+# Uploads/private files
+uploads/
+public/uploads/
+
+# Local database/temp data
+DB/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build/cache
+dist/
+build/
+.cache/
+
+# Test/Coverage
+coverage/
+.nyc_output/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo

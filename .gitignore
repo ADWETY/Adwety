@@ -1,0 +1,64 @@
+# =========================
+# ADWETY - Root .gitignore
+# Place this file in the main project folder beside Backend and Frontend
+# =========================
+
+# Node modules
+node_modules/
+**/node_modules/
+
+# Environment files - never upload secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend build/cache
+Frontend/dist/
+Frontend/build/
+Frontend/.vite/
+Frontend/.cache/
+
+# Backend build/cache
+Backend/dist/
+Backend/build/
+Backend/.cache/
+
+# Uploads/private files
+Backend/uploads/
+Backend/public/uploads/
+uploads/
+
+# Local database/temp data
+Backend/DB/
+DB/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test/Coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+.cache/
