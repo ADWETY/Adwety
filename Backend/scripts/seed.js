@@ -10,9 +10,11 @@ const Pharmacy = require('../DB/Models/pharmacy.model');
 const Inventory = require('../DB/Models/inventory.model');
 const Notification = require('../DB/Models/notification.model');
 const OtpChallenge = require('../DB/Models/otp.model');
+const ApprovalRequest = require('../DB/Models/pharmacyrequest.model');
 
 const requiredPasswordMessage = `Missing seed password env variables.
 Set these in Backend/.env before running seed:
+- SEED_OWNER_PASSWORD
 - SEED_SUPER_ADMIN_PASSWORD
 - SEED_PHARMACY_ADMIN_PASSWORD
 - SEED_SUPPORT_ADMIN_PASSWORD
@@ -21,6 +23,7 @@ Set these in Backend/.env before running seed:
 function requireSeedEnv() {
   const missing = [];
   const required = [
+    'seedOwnerEmail', 'seedOwnerPassword',
     'seedSuperAdminEmail', 'seedSuperAdminPassword',
     'seedPharmacyAdminEmail', 'seedPharmacyAdminPassword',
     'seedSupportAdminEmail', 'seedSupportAdminPassword',
@@ -32,7 +35,7 @@ function requireSeedEnv() {
 
 async function clearCollections() {
   await Promise.all([
-    User.deleteMany({}), Admin.deleteMany({}), Category.deleteMany({}), Drug.deleteMany({}), Pharmacy.deleteMany({}), Inventory.deleteMany({}), Notification.deleteMany({}), OtpChallenge.deleteMany({}),
+    User.deleteMany({}), Admin.deleteMany({}), Category.deleteMany({}), Drug.deleteMany({}), Pharmacy.deleteMany({}), Inventory.deleteMany({}), Notification.deleteMany({}), OtpChallenge.deleteMany({}), ApprovalRequest.deleteMany({}),
   ]);
 }
 
@@ -87,14 +90,20 @@ async function createDemoInventoryIfEmpty() {
   return { drugs, pharmacies };
 }
 
-async function upsertAdmin({ fullName, email, password, role, phoneNumber = '' }) {
+async function upsertAdmin({ fullName, email, password, role, phoneNumber = '', pharmacyId = null }) {
   const passwordHash = await bcrypt.hash(password, env.bcryptSaltRounds);
   const existing = await Admin.findOne({ email });
   if (existing) {
-    console.log(`Admin exists: ${email} (${role})`);
+    existing.role = role;
+    existing.isActive = true;
+    existing.isEmailVerified = true;
+    existing.approvalStatus = 'approved';
+    existing.approvedAt = existing.approvedAt || new Date();
+    await existing.save();
+    console.log('Admin exists and was approved: ' + email + ' (' + role + ')');
     return existing;
   }
-  const admin = await Admin.create({ fullName, email, passwordHash, role, phoneNumber, isActive: true, isEmailVerified: true });
+  const admin = await Admin.create({ fullName, email, passwordHash, role, phoneNumber, pharmacyId, isActive: true, isEmailVerified: true, approvalStatus: 'approved', approvedAt: new Date() });
   console.log(`Admin created: ${email} (${role})`);
   return admin;
 }
@@ -113,6 +122,7 @@ async function upsertUser({ fullName, email, password, phoneNumber = '' }) {
 
 async function createAccountsFromEnv() {
   const user = await upsertUser({ fullName: 'Mona Ahmed', email: env.seedDemoUserEmail, password: env.seedDemoUserPassword, phoneNumber: '01000000000' });
+  await upsertAdmin({ fullName: 'System Owner', email: env.seedOwnerEmail, password: env.seedOwnerPassword, role: 'owner', phoneNumber: '01099999999' });
   await upsertAdmin({ fullName: 'Super Admin', email: env.seedSuperAdminEmail, password: env.seedSuperAdminPassword, role: 'super_admin', phoneNumber: '01011111111' });
   await upsertAdmin({ fullName: 'BlueCare Manager', email: env.seedPharmacyAdminEmail, password: env.seedPharmacyAdminPassword, role: 'pharmacy_admin', phoneNumber: '01022222222' });
   await upsertAdmin({ fullName: 'Support Admin', email: env.seedSupportAdminEmail, password: env.seedSupportAdminPassword, role: 'support_admin', phoneNumber: '01033333333' });

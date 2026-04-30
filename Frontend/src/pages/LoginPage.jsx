@@ -11,7 +11,7 @@ export default function LoginPage() {
   const { t, theme, toggleTheme, language, setLanguage, isRtl } = usePreferences();
   const toast = useToast();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: env.demoUsers.super_admin.email, password: '', role: 'super_admin' });
+  const [form, setForm] = useState({ email: env.demoUsers.owner.email, password: '', role: 'owner' });
   const [otpState, setOtpState] = useState(null);
   const [otp, setOtp] = useState('');
   const [show, setShow] = useState(false);
@@ -148,6 +148,7 @@ export default function LoginPage() {
           {!otpState ? (
             <>
               <div className="mt-6 grid gap-2">
+                <button className="btn-secondary" type="button" onClick={() => demo('owner')}>{t('actions.loginOwner')}</button>
                 <button className="btn-secondary" type="button" onClick={() => demo('super_admin')}>{t('actions.loginSuper')}</button>
                 <button className="btn-secondary" type="button" onClick={() => demo('pharmacy_admin')}>{t('actions.loginPharmacy')}</button>
                 <button className="btn-secondary" type="button" onClick={() => demo('support_admin')}>{t('actions.loginSupport')}</button>

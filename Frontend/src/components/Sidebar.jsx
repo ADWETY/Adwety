@@ -6,19 +6,19 @@ import { usePreferences } from '../context/PreferencesContext';
 import { cn } from '../lib/utils';
 
 const items = [
-  { to: '/', labelKey: 'nav.dashboard', icon: Home, roles: ['super_admin', 'pharmacy_admin', 'support_admin'] },
-  { to: '/medicines', labelKey: 'nav.medicines', icon: Pill, roles: ['super_admin', 'pharmacy_admin', 'user'] },
-  { to: '/medicines/new', labelKey: 'nav.addMedicine', icon: PlusCircle, roles: ['super_admin', 'pharmacy_admin'] },
-  { to: '/low-stock', labelKey: 'nav.lowStock', icon: PackageX, roles: ['super_admin', 'pharmacy_admin'] },
-  { to: '/pharmacies', labelKey: 'nav.pharmacies', icon: Building2, roles: ['super_admin', 'pharmacy_admin'] },
-  { to: '/pharmacies/new', labelKey: 'nav.addPharmacy', icon: PlusCircle, roles: ['super_admin'] },
-  { to: '/analytics', labelKey: 'nav.analytics', icon: BarChart3, roles: ['super_admin', 'pharmacy_admin'] },
-  { to: '/prescriptions', labelKey: 'nav.prescriptionScanner', icon: ScanSearch, roles: ['super_admin', 'pharmacy_admin', 'user'] },
-  { to: '/notifications', labelKey: 'nav.notifications', icon: Bell, roles: ['super_admin', 'pharmacy_admin', 'support_admin'] },
-  { to: '/pharmacy-requests', labelKey: 'nav.pharmacyRequests', icon: ClipboardList, roles: ['super_admin'] },
-  { to: '/support-tickets', labelKey: 'nav.supportTickets', icon: Headphones, roles: ['super_admin', 'support_admin'] },
-  { to: '/users', labelKey: 'nav.users', icon: Users, roles: ['super_admin'] },
-  { to: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['super_admin', 'pharmacy_admin', 'support_admin', 'user'] },
+  { to: '/', labelKey: 'nav.dashboard', icon: Home, roles: ['owner', 'super_admin', 'pharmacy_admin', 'support_admin'] },
+  { to: '/medicines', labelKey: 'nav.medicines', icon: Pill, roles: ['owner', 'super_admin', 'pharmacy_admin', 'user'] },
+  { to: '/medicines/new', labelKey: 'nav.addMedicine', icon: PlusCircle, roles: ['owner', 'super_admin', 'pharmacy_admin'] },
+  { to: '/low-stock', labelKey: 'nav.lowStock', icon: PackageX, roles: ['owner', 'super_admin', 'pharmacy_admin'] },
+  { to: '/pharmacies', labelKey: 'nav.pharmacies', icon: Building2, roles: ['owner', 'super_admin', 'pharmacy_admin'] },
+  { to: '/pharmacies/new', labelKey: 'nav.addPharmacy', icon: PlusCircle, roles: ['owner'] },
+  { to: '/analytics', labelKey: 'nav.analytics', icon: BarChart3, roles: ['owner', 'super_admin', 'pharmacy_admin'] },
+  { to: '/prescriptions', labelKey: 'nav.prescriptionScanner', icon: ScanSearch, roles: ['owner', 'super_admin', 'pharmacy_admin', 'user'] },
+  { to: '/notifications', labelKey: 'nav.notifications', icon: Bell, roles: ['owner', 'super_admin', 'pharmacy_admin', 'support_admin'] },
+  { to: '/pharmacy-requests', labelKey: 'nav.pharmacyRequests', icon: ClipboardList, roles: ['owner'] },
+  { to: '/support-tickets', labelKey: 'nav.supportTickets', icon: Headphones, roles: ['owner', 'super_admin', 'support_admin'] },
+  { to: '/users', labelKey: 'nav.users', icon: Users, roles: ['owner'] },
+  { to: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['owner', 'super_admin', 'pharmacy_admin', 'support_admin', 'user'] },
 ];
 
 export default function Sidebar({ mobile = false }) {

@@ -15,8 +15,7 @@ node_modules/
 uploads/
 public/uploads/
 
-# Local database/temp data
-DB/
+
 
 # Logs
 logs/

@@ -39,9 +39,7 @@ Backend/uploads/
 Backend/public/uploads/
 uploads/
 
-# Local database/temp data
-Backend/DB/
-DB/
+
 
 # OS files
 .DS_Store

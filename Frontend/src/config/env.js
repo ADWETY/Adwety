@@ -11,6 +11,11 @@ export const env = {
   enableAiScan: String(import.meta.env.VITE_ENABLE_AI_SCAN || 'true') === 'true',
   appVersion: import.meta.env.VITE_APP_VERSION || '2.1.0-otp-secure',
   demoUsers: {
+    owner: {
+      email: import.meta.env.VITE_OWNER_EMAIL || 'owner@adwety.app',
+      password: '',
+      name: import.meta.env.VITE_OWNER_NAME || 'System Owner',
+    },
     super_admin: {
       email: import.meta.env.VITE_SUPER_ADMIN_EMAIL || 'admin@adwety.app',
       password: '',

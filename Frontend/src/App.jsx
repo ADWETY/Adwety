@@ -39,10 +39,11 @@ function GuestRoute({ children }) {
   return children;
 }
 
-const superRoles = ['super_admin'];
-const adminRoles = ['super_admin', 'pharmacy_admin'];
-const supportRoles = ['super_admin', 'support_admin'];
-const scannerRoles = ['super_admin', 'pharmacy_admin', 'user'];
+const ownerRoles = ['owner'];
+const superRoles = ['owner', 'super_admin'];
+const adminRoles = ['owner', 'super_admin', 'pharmacy_admin'];
+const supportRoles = ['owner', 'super_admin', 'support_admin'];
+const scannerRoles = ['owner', 'super_admin', 'pharmacy_admin', 'user'];
 
 export default function App() {
   return (
@@ -55,17 +56,17 @@ export default function App() {
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
         <Route path="analytics" element={<ProtectedRoute roles={adminRoles}><AnalyticsPage /></ProtectedRoute>} />
-        <Route path="medicines" element={<ProtectedRoute roles={['super_admin', 'pharmacy_admin', 'user']}><MedicinesPage /></ProtectedRoute>} />
+        <Route path="medicines" element={<ProtectedRoute roles={['owner', 'super_admin', 'pharmacy_admin', 'user']}><MedicinesPage /></ProtectedRoute>} />
         <Route path="medicines/new" element={<ProtectedRoute roles={adminRoles}><AddMedicinePage /></ProtectedRoute>} />
         <Route path="low-stock" element={<ProtectedRoute roles={adminRoles}><LowStockPage /></ProtectedRoute>} />
         <Route path="pharmacies" element={<ProtectedRoute roles={adminRoles}><PharmaciesPage /></ProtectedRoute>} />
-        <Route path="pharmacies/new" element={<ProtectedRoute roles={superRoles}><AddPharmacyPage /></ProtectedRoute>} />
+        <Route path="pharmacies/new" element={<ProtectedRoute roles={ownerRoles}><AddPharmacyPage /></ProtectedRoute>} />
         <Route path="pharmacies/:id" element={<ProtectedRoute roles={adminRoles}><PharmacyDetailsPage /></ProtectedRoute>} />
         <Route path="prescriptions" element={<ProtectedRoute roles={scannerRoles}><PrescriptionScannerPage /></ProtectedRoute>} />
         <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="pharmacy-requests" element={<ProtectedRoute roles={superRoles}><PharmacyRequestsPage /></ProtectedRoute>} />
+        <Route path="pharmacy-requests" element={<ProtectedRoute roles={ownerRoles}><PharmacyRequestsPage /></ProtectedRoute>} />
         <Route path="support-tickets" element={<ProtectedRoute roles={supportRoles}><SupportTicketsPage /></ProtectedRoute>} />
-        <Route path="users" element={<ProtectedRoute roles={superRoles}><UsersPage /></ProtectedRoute>} />
+        <Route path="users" element={<ProtectedRoute roles={ownerRoles}><UsersPage /></ProtectedRoute>} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>

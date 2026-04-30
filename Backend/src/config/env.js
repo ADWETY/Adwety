@@ -54,6 +54,8 @@ const env = {
   smsFrom: process.env.SMS_FROM || 'ADWETY',
 
   seedForceReset: parseBoolean(process.env.SEED_FORCE_RESET, false),
+  seedOwnerEmail: process.env.SEED_OWNER_EMAIL || '',
+  seedOwnerPassword: process.env.SEED_OWNER_PASSWORD || '',
   seedSuperAdminEmail: process.env.SEED_SUPER_ADMIN_EMAIL || '',
   seedSuperAdminPassword: process.env.SEED_SUPER_ADMIN_PASSWORD || '',
   seedPharmacyAdminEmail: process.env.SEED_PHARMACY_ADMIN_EMAIL || '',
