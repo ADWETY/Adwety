@@ -3,7 +3,7 @@ const { mongoose } = require('./base.model');
 const schema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, index: true },
   count: { type: Number, default: 0 },
-  resetAt: { type: Date, required: true, index: true },
+  resetAt: { type: Date, required: true },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

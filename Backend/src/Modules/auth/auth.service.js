@@ -38,9 +38,10 @@ function serializeAccount(account, { token = null, role = 'user', accountType = 
 }
 
 async function findAccountByEmail(email) {
+  const sanitized = sanitizeEmail(email);
   const [user, admin] = await Promise.all([
-    User.findOne({ email }),
-    Admin.findOne({ email }),
+    User.findOne({ email: sanitized }),
+    Admin.findOne({ email: sanitized }),
   ]);
 
   if (user && admin) {
@@ -53,10 +54,16 @@ async function findAccountByEmail(email) {
   return null;
 }
 
-async function createOtpChallenge({ account, accountType, role, purpose }) {
+async function createOtpChallenge({ account, accountType, role, purpose, email = null, phoneNumber = null, metadata = {} }) {
   const otp = generateOtp();
   const challengeToken = generateChallengeToken();
+  const destinationEmail = sanitizeEmail(email || account.email || '');
+  const destinationPhone = phoneNumber ?? account.phoneNumber ?? '';
   const expiresAt = new Date(Date.now() + env.otpExpiresMinutes * 60 * 1000);
+
+  if (!destinationEmail && env.otpDeliveryChannel !== 'sms') {
+    throw new AppError('OTP email destination is missing.', 422);
+  }
 
   await OtpChallenge.deleteMany({
     accountId: account._id,
@@ -65,9 +72,9 @@ async function createOtpChallenge({ account, accountType, role, purpose }) {
     consumedAt: null,
   });
 
-  await OtpChallenge.create({
-    email: account.email,
-    phoneNumber: account.phoneNumber || '',
+  const challenge = await OtpChallenge.create({
+    email: destinationEmail,
+    phoneNumber: destinationPhone || '',
     accountType,
     accountId: account._id,
     role,
@@ -76,24 +83,31 @@ async function createOtpChallenge({ account, accountType, role, purpose }) {
     tokenHash: hashValue(challengeToken),
     expiresAt,
     maxAttempts: env.otpMaxAttempts,
+    metadata,
   });
 
-  const delivery = await sendOtp({
-    email: account.email,
-    phoneNumber: account.phoneNumber || '',
-    otp,
-    purpose,
-  });
+  try {
+    const delivery = await sendOtp({
+      email: destinationEmail,
+      phoneNumber: destinationPhone || '',
+      otp,
+      purpose,
+    });
 
-  return {
-    requires_otp: true,
-    otp_token: challengeToken,
-    expires_in_minutes: env.otpExpiresMinutes,
-    delivery,
-  };
+    return {
+      requires_otp: true,
+      otp_token: challengeToken,
+      expires_in_minutes: env.otpExpiresMinutes,
+      delivery,
+    };
+  } catch (error) {
+    await OtpChallenge.findByIdAndDelete(challenge._id).catch(() => {});
+    throw error;
+  }
 }
 
 async function consumeOtpChallenge({ otpToken, otp, purpose }) {
+  if (!otpToken || !otp) throw new AppError('OTP token and code are required', 422);
   const challenge = await OtpChallenge.findOneAndUpdate(
     {
       tokenHash: hashValue(otpToken),
@@ -132,7 +146,12 @@ async function registerUser(payload) {
   });
 
   if (env.requireRegisterOtp) {
-    return createOtpChallenge({ account: user, accountType: 'user', role: 'user', purpose: 'register' });
+    try {
+      return await createOtpChallenge({ account: user, accountType: 'user', role: 'user', purpose: 'register' });
+    } catch (error) {
+      await User.findByIdAndDelete(user._id).catch(() => {});
+      throw error;
+    }
   }
 
   const token = signToken({ sub: user._id.toString(), type: 'user', role: 'user' });
@@ -231,4 +250,8 @@ module.exports = {
   verifyLoginOtp,
   forgotPassword,
   resetPassword,
+  createOtpChallenge,
+  consumeOtpChallenge,
+  findAccountByEmail,
+  serializeAccount,
 };

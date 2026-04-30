@@ -1,4 +1,5 @@
-import { Languages, Menu, Moon, Sun } from 'lucide-react';
+import { Menu, Moon, Sun } from 'lucide-react';
+import LanguageToggle from './LanguageToggle';
 import RoleBadge from './RoleBadge';
 import { env } from '../config/env';
 import { useAuth } from '../context/AuthContext';
@@ -8,16 +9,21 @@ import { cn } from '../lib/utils';
 
 export default function Topbar({ title, description, onMenuClick }) {
   const { session } = useAuth();
-  const { theme, toggleTheme, language, setLanguage, t, isRtl } = usePreferences();
+  const { theme, toggleTheme, t, isRtl } = usePreferences();
   const toast = useToast();
-  function changeTheme() { toggleTheme(); toast.info(t('toast.themeChanged')); }
-  function changeLanguage(value) { setLanguage(value); toast.info(t('toast.languageChanged')); }
+
+  function changeTheme() {
+    toggleTheme();
+    toast.info(t('toast.themeChanged'));
+  }
 
   return (
     <div className="card mb-6 p-5">
       <div className={cn('flex flex-col gap-4 md:flex-row md:items-start md:justify-between', isRtl && 'md:flex-row-reverse')}>
         <div className={cn('flex items-start gap-3', isRtl && 'flex-row-reverse text-right')}>
-          <button type="button" onClick={onMenuClick} className="btn-secondary lg:hidden" aria-label="Open menu"><Menu className="h-4 w-4" /></button>
+          <button type="button" onClick={onMenuClick} className="btn-secondary lg:hidden" aria-label="Open menu">
+            <Menu className="h-4 w-4" />
+          </button>
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-cyan-700 dark:text-cyan-200/70">{env.appName}</p>
             <h2 className="mt-2 text-2xl font-semibold text-primary">{title}</h2>
@@ -29,15 +35,11 @@ export default function Topbar({ title, description, onMenuClick }) {
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             {theme === 'dark' ? t('app.lightMode') : t('app.darkMode')}
           </button>
-          <label className="btn-secondary gap-2">
-            <Languages className="h-4 w-4" />
-            <select className="bg-transparent text-sm outline-none" value={language} onChange={(event) => changeLanguage(event.target.value)} aria-label={t('app.language')}>
-              <option value="en">English</option>
-              <option value="ar">العربية</option>
-            </select>
-          </label>
+          <LanguageToggle />
           <RoleBadge role={session?.role} />
-          <span className="badge border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200">{t('app.ai')}: {env.aiProvider}</span>
+          <span className="badge border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+            {t('app.ai')}: {env.aiProvider}
+          </span>
         </div>
       </div>
     </div>

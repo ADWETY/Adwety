@@ -25,6 +25,7 @@ function buildSession(payload, fallback = {}) {
     token: null,
     csrfToken: payload.csrf_token || fallback.csrfToken || null,
     emailVerified: Boolean(payload.email_verified),
+    phoneNumber: payload.phone_number || fallback.phoneNumber || '',
     phoneVerified: Boolean(payload.phone_verified),
   };
 }
@@ -111,6 +112,22 @@ export function AuthProvider({ children }) {
         new_password: newPassword,
       });
       return result?.data || {};
+    },
+    updateSessionProfile(profile) {
+      if (!profile || !session) return null;
+      const nextSession = {
+        ...session,
+        email: profile.email || session.email,
+        name: profile.name || session.name,
+        role: profile.role || session.role,
+        accountType: profile.account_type || session.accountType,
+        phoneNumber: profile.phone_number || session.phoneNumber || '',
+        emailVerified: Boolean(profile.email_verified),
+        phoneVerified: Boolean(profile.phone_verified),
+      };
+      setSession(nextSession);
+      setStoredSession(nextSession);
+      return nextSession;
     },
     logout() {
       postJson('/auth/logout', {}).catch(() => {});

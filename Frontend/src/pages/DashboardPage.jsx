@@ -61,8 +61,36 @@ export default function DashboardPage() {
         <StatCard label={t('dashboard.lowStock')} value={metrics.lowStock} hint="Qty 1 - 9" icon={AlertTriangle} />
         <StatCard label={t('dashboard.outOfStock')} value={metrics.outOfStock} hint="Qty 0" icon={Pill} />
         <StatCard label={t('dashboard.activePharmacies')} value={metrics.activePharmacies} hint="Active branches" icon={Building2} />
-        <StatCard label={t('dashboard.averagePrice')} value={formatCurrency(metrics.averagePrice, language)} hint="Catalog average" icon={Wallet} />
-        <StatCard label={t('dashboard.aiScans')} value={metrics.aiScans} hint="Scanner activity" icon={ScanLine} />
+<div className="card min-w-0 p-5">
+  <div className="flex items-start justify-between gap-3">
+    <div className="min-w-0 flex-1">
+      <p className="line-clamp-2 text-sm font-medium leading-5 text-muted">
+        {t('dashboard.averagePrice')}
+      </p>
+
+      <div className="mt-3 flex min-w-0 items-baseline gap-1.5">
+        <span className="block max-w-full truncate text-[clamp(1.65rem,2vw,2.15rem)] font-bold leading-none tracking-tight text-primary">
+          {new Intl.NumberFormat(language === 'ar' ? 'ar-EG' : 'en-EG', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+          }).format(Number(metrics.averagePrice || 0))}
+        </span>
+
+        <span className="shrink-0 whitespace-nowrap text-sm font-bold text-muted">
+          {language === 'ar' ? 'ج.م' : 'EGP'}
+        </span>
+      </div>
+    </div>
+
+    <span className="shrink-0 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+      <Wallet className="h-5 w-5" />
+    </span>
+  </div>
+
+  <p className="mt-3 truncate text-xs text-soft">
+    {language === 'ar' ? 'متوسط الكتالوج' : 'Catalog average'}
+  </p>
+</div>        <StatCard label={t('dashboard.aiScans')} value={metrics.aiScans} hint="Scanner activity" icon={ScanLine} />
       </section>
 
       <section className="card p-6">

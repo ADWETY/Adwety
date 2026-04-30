@@ -2,12 +2,23 @@ export function cn(...classes) {
   return classes.filter(Boolean).join(' ');
 }
 
-export function formatCurrency(value, language = 'en') {
-  return new Intl.NumberFormat(language === 'ar' ? 'ar-EG' : 'en-EG', {
-    style: 'currency',
-    currency: 'EGP',
+export function formatCurrencyParts(value, language = 'en') {
+  const amount = Number(value || 0);
+
+  const formattedNumber = new Intl.NumberFormat(language === 'ar' ? 'ar-EG' : 'en-EG', {
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(Number(value || 0));
+  }).format(amount);
+
+  return {
+    amount: formattedNumber,
+    currency: language === 'ar' ? 'ج.م' : 'EGP',
+  };
+}
+
+export function formatCurrency(value, language = 'en') {
+  const parts = formatCurrencyParts(value, language);
+  return language === 'ar' ? `${parts.amount} ${parts.currency}` : `${parts.currency} ${parts.amount}`;
 }
 
 export function formatDate(value, language = 'en') {

@@ -18,15 +18,25 @@ async function scanPrescription({ file, userId, mockText }) {
     extractedText: mockText || '',
   });
 
-  const result = await extractPrescription({
-    fileBuffer: file?.buffer || Buffer.from(mockText || ''),
-    mimeType: file?.mimetype || 'text/plain',
-    fallbackText: mockText || '',
-  });
+  let result;
+  try {
+    result = await extractPrescription({
+      fileBuffer: file?.buffer || Buffer.from(mockText || ''),
+      mimeType: file?.mimetype || 'text/plain',
+      fallbackText: mockText || '',
+    });
+  } catch (error) {
+    prescription.status = 'failed';
+    prescription.extractedText = mockText || '';
+    await prescription.save();
+    throw error;
+  }
 
   prescription.extractedText = result.extracted_text || '';
   prescription.status = 'completed';
   await prescription.save();
+
+  await PrescriptionExtractedDrug.deleteMany({ prescriptionId: prescription._id });
 
   const savedExtractedDrugs = [];
   for (const item of result.drugs || []) {
@@ -41,13 +51,14 @@ async function scanPrescription({ file, userId, mockText }) {
       id: created._id.toString(),
       extracted_name: item.extracted_name,
       confidence_score: item.confidence_score,
+      match_score: item.match_score || 0,
       matched_drug: item.matched_drug,
     });
   }
 
   return {
     prescription_id: prescription._id.toString(),
-    image_url: null,
+    image_url: imageUrl,
     extracted_text: prescription.extractedText,
     extracted_drugs: savedExtractedDrugs,
     drugs: savedExtractedDrugs.filter((item) => item.matched_drug).map((item) => item.matched_drug),
