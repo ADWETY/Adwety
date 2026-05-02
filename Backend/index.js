@@ -24,8 +24,6 @@ function resolveTrustProxy(value) {
     return false;
   }
 
-  // ممنوع في production عندك TRUST_PROXY=true أو 1
-  // لكن بنسيبها هنا فقط لو البيئة local أو لو env.js سمح بها
   if (raw === 'true' || raw === '1') {
     return 1;
   }
@@ -74,6 +72,18 @@ app.use((_req, res, next) => {
   next();
 });
 
+/**
+ * IMPORTANT:
+ * Healthcheck must be before CORS / CSRF / API limiter.
+ * Railway and direct browser checks may not send Origin header.
+ */
+app.get('/health', (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.use(cors(corsOptions()));
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 
@@ -90,13 +100,6 @@ app.use(parseCookies);
 app.use(sanitizeRequest);
 app.use(csrfProtection);
 app.use('/api/v1', apiLimiter);
-
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  });
-});
 
 registerRoutes(app);
 
