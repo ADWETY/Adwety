@@ -1,0 +1,320 @@
+const bcrypt = require('bcryptjs');
+const mongoose = require('mongoose');
+const { z } = require('zod');
+const { User, Pharmacy, Drug, InventorySnapshot, Category, AiLog, SystemLog } = require('../models');
+const env = require('../config/env');
+const asyncHandler = require('../utils/async-handler');
+const { success } = require('../utils/response');
+const { isValidObjectId, validateObjectId, pagination, escapeRegex, AppError } = require('../utils/helpers');
+const { signToken } = require('../services/token.service');
+const { systemLog } = require('../services/logging.service');
+
+const objectId = z.string().refine(isValidObjectId, 'Invalid ObjectId format');
+const passwordSchema = z.string().min(8).max(72).regex(/[A-Za-z]/, 'Password must contain a letter').regex(/[0-9]/, 'Password must contain a number');
+const roleEnum = z.enum(['admin', 'pharmacist', 'patient']);
+const statusEnum = z.enum(['pending', 'approved', 'active', 'inactive', 'rejected']);
+const arr = z.array(z.string().trim().min(1).max(120)).optional().default([]);
+
+function listQuery(extra = {}) {
+  return z.object({
+    q: z.string().max(120).optional(),
+    page: z.coerce.number().int().min(1).optional().default(1),
+    limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+    ...extra
+  }).passthrough();
+}
+
+exports.loginSchema = z.object({
+  body: z.object({ email: z.string().email(), password: z.string().min(1).max(72) }).strict(),
+  query: z.object({}).strict(),
+  params: z.object({}).strict()
+});
+exports.emptySchema = z.object({ body: z.object({}).strict(), query: z.object({}).passthrough(), params: z.object({}).strict() });
+exports.byIdSchema = z.object({ body: z.object({}).strict(), query: z.object({}).strict(), params: z.object({ id: objectId }) });
+exports.logByIdSchema = z.object({ body: z.object({}).strict(), query: z.object({ source: z.enum(['system', 'ai']).optional().default('system') }).strict(), params: z.object({ id: objectId }) });
+exports.listSchema = z.object({ body: z.object({}).strict(), query: listQuery(), params: z.object({}).strict() });
+exports.userListSchema = z.object({ body: z.object({}).strict(), query: listQuery({ role: roleEnum.optional(), isActive: z.coerce.boolean().optional(), is_active: z.coerce.boolean().optional() }), params: z.object({}).strict() });
+exports.pharmacyListSchema = z.object({ body: z.object({}).strict(), query: listQuery({ status: statusEnum.optional(), ownerId: objectId.optional(), owner_id: objectId.optional() }), params: z.object({}).strict() });
+exports.drugListSchema = z.object({ body: z.object({}).strict(), query: listQuery({ category: z.string().max(100).optional(), isActive: z.coerce.boolean().optional(), is_active: z.coerce.boolean().optional() }), params: z.object({}).strict() });
+exports.inventoryListSchema = z.object({ body: z.object({}).strict(), query: listQuery({ pharmacyId: objectId.optional(), pharmacy_id: objectId.optional(), drugId: objectId.optional(), drug_id: objectId.optional(), lowStock: z.coerce.number().int().min(0).optional(), low_stock: z.coerce.number().int().min(0).optional() }), params: z.object({}).strict() });
+exports.logListSchema = z.object({ body: z.object({}).strict(), query: listQuery({ type: z.enum(['system', 'sync', 'login_attempt', 'ai', 'admin_action', 'error']).optional(), source: z.enum(['system', 'ai']).optional().default('system'), status: z.enum(['started', 'completed', 'failed']).optional(), success: z.coerce.boolean().optional() }), params: z.object({}).strict() });
+
+const userBody = z.object({
+  fullName: z.string().min(2).max(100).optional(),
+  full_name: z.string().min(2).max(100).optional(),
+  name: z.string().min(2).max(100).optional(),
+  email: z.string().email().max(254).optional(),
+  password: passwordSchema.optional(),
+  role: roleEnum.optional(),
+  pharmacyId: objectId.optional().nullable(),
+  pharmacy_id: objectId.optional().nullable(),
+  phoneNumber: z.string().max(32).optional(),
+  phone_number: z.string().max(32).optional(),
+  isActive: z.boolean().optional(),
+  is_active: z.boolean().optional()
+}).strict();
+exports.createUserSchema = z.object({ body: userBody.extend({ email: z.string().email().max(254), password: passwordSchema }).refine((v) => v.fullName || v.full_name || v.name, 'name is required'), query: z.object({}).strict(), params: z.object({}).strict() });
+exports.updateUserSchema = z.object({ body: userBody, query: z.object({}).strict(), params: z.object({ id: objectId }) });
+
+const pharmacyBody = z.object({
+  name: z.string().min(2).max(200).optional(),
+  address: z.string().min(3).max(500).optional(),
+  phone: z.string().max(32).optional().default(''),
+  email: z.string().email().optional().or(z.literal('')).default(''),
+  status: statusEnum.optional(),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
+  workingHours: z.string().max(200).optional(),
+  working_hours: z.string().max(200).optional(),
+  ownerId: objectId.optional().nullable(),
+  owner_id: objectId.optional().nullable(),
+  rating: z.coerce.number().min(0).max(5).optional()
+}).strict();
+exports.createPharmacySchema = z.object({ body: pharmacyBody.extend({ name: z.string().min(2).max(200), address: z.string().min(3).max(500), latitude: z.coerce.number().min(-90).max(90).optional(), longitude: z.coerce.number().min(-180).max(180).optional() }).refine((v) => (v.latitude !== undefined && v.longitude !== undefined) || (v.lat !== undefined && v.lng !== undefined), 'latitude/longitude or lat/lng are required'), query: z.object({}).strict(), params: z.object({}).strict() });
+exports.updatePharmacySchema = z.object({ body: pharmacyBody, query: z.object({}).strict(), params: z.object({ id: objectId }) });
+
+const drugBody = z.object({
+  genericName: z.string().min(2).max(120).optional(),
+  generic_name: z.string().min(2).max(120).optional(),
+  brandNames: arr,
+  brand_names: arr,
+  aliases: arr,
+  category: z.string().min(2).max(100).optional().default('General'),
+  dosageForm: z.string().min(1).max(80).optional(),
+  dosage_form: z.string().min(1).max(80).optional(),
+  strength: z.string().min(1).max(80).optional(),
+  description: z.string().max(2000).optional().default(''),
+  isActive: z.boolean().optional(),
+  is_active: z.boolean().optional()
+}).strict();
+exports.createDrugSchema = z.object({ body: drugBody.extend({ strength: z.string().min(1).max(80) }).refine((v) => v.genericName || v.generic_name, 'genericName is required').refine((v) => v.dosageForm || v.dosage_form, 'dosageForm is required'), query: z.object({}).strict(), params: z.object({}).strict() });
+exports.updateDrugSchema = z.object({ body: drugBody, query: z.object({}).strict(), params: z.object({ id: objectId }) });
+
+exports.createCategorySchema = z.object({ body: z.object({ name: z.string().min(2).max(100), description: z.string().max(1000).optional().default('') }).strict(), query: z.object({}).strict(), params: z.object({}).strict() });
+exports.updateCategorySchema = z.object({ body: z.object({ name: z.string().min(2).max(100).optional(), description: z.string().max(1000).optional() }).strict(), query: z.object({}).strict(), params: z.object({ id: objectId }) });
+
+const inventoryBase = z.object({
+  pharmacyId: objectId.optional(),
+  pharmacy_id: objectId.optional(),
+  drugId: objectId.optional(),
+  drug_id: objectId.optional(),
+  quantity: z.coerce.number().int().min(0),
+  price: z.coerce.number().min(0).optional().default(0)
+}).strict();
+
+const inventoryItem = inventoryBase.refine((v) => v.drugId || v.drug_id, 'drugId is required');
+
+const inventorySyncItem = z.object({
+  drugId: objectId.optional(),
+  drug_id: objectId.optional(),
+  quantity: z.coerce.number().int().min(0),
+  price: z.coerce.number().min(0).optional().default(0)
+}).strict().refine((v) => v.drugId || v.drug_id, 'drugId is required');
+
+const inventoryUpdateBody = z.object({
+  pharmacyId: objectId.optional(),
+  pharmacy_id: objectId.optional(),
+  drugId: objectId.optional(),
+  drug_id: objectId.optional(),
+  quantity: z.coerce.number().int().min(0).optional(),
+  price: z.coerce.number().min(0).optional()
+}).strict();
+
+exports.createInventorySchema = z.object({ body: inventoryItem.refine((v) => v.pharmacyId || v.pharmacy_id, 'pharmacyId is required'), query: z.object({}).strict(), params: z.object({}).strict() });
+exports.updateInventorySchema = z.object({ body: inventoryUpdateBody, query: z.object({}).strict(), params: z.object({ id: objectId }) });
+exports.syncInventorySchema = z.object({ body: z.object({ pharmacyId: objectId.optional(), pharmacy_id: objectId.optional(), inventory: z.array(inventorySyncItem).min(1).max(1000) }).strict().refine((v) => v.pharmacyId || v.pharmacy_id, 'pharmacyId is required'), query: z.object({}).strict(), params: z.object({}).strict() });
+
+function meta(p, total) { return { page: p.page, limit: p.limit, total, pages: Math.ceil(total / p.limit) }; }
+function rx(value) { return new RegExp(escapeRegex(value), 'i'); }
+function id(value) { return value ? String(value._id || value.id || value) : null; }
+function userDto(user) { return { id: id(user), name: user.fullName, fullName: user.fullName, email: user.email, role: user.role, phoneNumber: user.phoneNumber || '', phone_number: user.phoneNumber || '', pharmacyId: user.pharmacyId || null, pharmacy_id: user.pharmacyId || null, isActive: user.isActive, is_active: user.isActive, lastLoginAt: user.lastLoginAt, last_login_at: user.lastLoginAt, createdAt: user.createdAt, created_at: user.createdAt, updatedAt: user.updatedAt, updated_at: user.updatedAt }; }
+function pharmacyDto(p) { return { id: id(p), name: p.name, address: p.address, phone: p.phone || '', email: p.email || '', status: p.status, latitude: p.latitude, longitude: p.longitude, location: p.location, workingHours: p.workingHours || '', working_hours: p.workingHours || '', ownerId: p.ownerId || null, owner_id: p.ownerId || null, rating: p.rating || 0, createdAt: p.createdAt, created_at: p.createdAt, updatedAt: p.updatedAt, updated_at: p.updatedAt }; }
+function drugDto(d) { return { id: id(d), genericName: d.genericName, generic_name: d.genericName, name: d.genericName, brandNames: d.brandNames || [], brand_names: d.brandNames || [], aliases: d.aliases || [], category: d.category, dosageForm: d.dosageForm, dosage_form: d.dosageForm, form: d.dosageForm, strength: d.strength, description: d.description || '', isActive: d.isActive !== false, is_active: d.isActive !== false, createdAt: d.createdAt, created_at: d.createdAt, updatedAt: d.updatedAt, updated_at: d.updatedAt }; }
+function categoryDto(c) { return { id: id(c), name: c.name, description: c.description || '', createdAt: c.createdAt, created_at: c.createdAt, updatedAt: c.updatedAt, updated_at: c.updatedAt }; }
+function inventoryDto(item) { return { id: id(item), pharmacyId: id(item.pharmacyId), pharmacy_id: id(item.pharmacyId), drugId: id(item.drugId), drug_id: id(item.drugId), quantity: item.quantity, price: item.price || 0, source: item.source || 'pos_snapshot', updatedAt: item.updatedAt, updated_at: item.updatedAt, createdAt: item.createdAt, created_at: item.createdAt, pharmacy: item.pharmacyId && item.pharmacyId.name ? pharmacyDto(item.pharmacyId) : null, drug: item.drugId && item.drugId.genericName ? drugDto(item.drugId) : null }; }
+function logDto(log) { return { id: id(log), type: log.type || log.status || 'ai', action: log.action || '', actorId: log.actorId || log.userId || null, actor_id: log.actorId || log.userId || null, actorRole: log.actorRole || '', actor_role: log.actorRole || '', success: log.success, message: log.message || log.errorMessage || '', metadata: log.metadata || {}, extractedText: log.extractedText || '', extracted_text: log.extractedText || '', extractedDrugs: log.extractedDrugs || [], extracted_drugs: log.extractedDrugs || [], confidence: log.confidence, status: log.status, provider: log.provider, createdAt: log.createdAt, created_at: log.createdAt, updatedAt: log.updatedAt, updated_at: log.updatedAt }; }
+
+function cleanUserPayload(body, isCreate = false) {
+  const out = {};
+  if (body.fullName || body.full_name || body.name) out.fullName = body.fullName || body.full_name || body.name;
+  if (body.email) out.email = body.email.trim().toLowerCase();
+  if (body.role) out.role = body.role;
+  if (body.phoneNumber !== undefined || body.phone_number !== undefined) out.phoneNumber = body.phoneNumber ?? body.phone_number ?? '';
+  if (body.pharmacyId !== undefined || body.pharmacy_id !== undefined) out.pharmacyId = body.pharmacyId ?? body.pharmacy_id ?? null;
+  if (body.isActive !== undefined || body.is_active !== undefined) out.isActive = body.isActive ?? body.is_active;
+  if (isCreate && out.isActive === undefined) out.isActive = true;
+  return out;
+}
+function cleanPharmacyPayload(body) {
+  const out = {};
+  for (const key of ['name', 'address', 'phone', 'email', 'status', 'rating']) if (body[key] !== undefined) out[key] = body[key];
+  if (body.workingHours !== undefined || body.working_hours !== undefined) out.workingHours = body.workingHours ?? body.working_hours ?? '';
+  if (body.ownerId !== undefined || body.owner_id !== undefined) out.ownerId = body.ownerId ?? body.owner_id ?? null;
+  const latitude = body.latitude ?? body.lat;
+  const longitude = body.longitude ?? body.lng;
+  if (latitude !== undefined) out.latitude = Number(latitude);
+  if (longitude !== undefined) out.longitude = Number(longitude);
+  return out;
+}
+async function ensureCategory(name) { if (!name) return null; return Category.findOneAndUpdate({ name }, { $setOnInsert: { description: '' } }, { upsert: true, new: true }); }
+function cleanDrugPayload(body) {
+  const out = {};
+  const genericName = body.genericName || body.generic_name;
+  const dosageForm = body.dosageForm || body.dosage_form;
+  const isActive = body.isActive ?? body.is_active;
+  if (genericName !== undefined) out.genericName = genericName;
+  if (body.brandNames !== undefined || body.brand_names !== undefined) out.brandNames = body.brandNames || body.brand_names || [];
+  if (body.aliases !== undefined) out.aliases = body.aliases || [];
+  if (body.category !== undefined) out.category = body.category || 'General';
+  if (dosageForm !== undefined) out.dosageForm = dosageForm;
+  if (body.strength !== undefined) out.strength = body.strength;
+  if (body.description !== undefined) out.description = body.description || '';
+  if (isActive !== undefined) out.isActive = isActive;
+  return out;
+}
+async function requireDoc(model, docId, name) { validateObjectId(docId); const doc = await model.findById(docId); if (!doc) throw new AppError(`${name} not found`, 404); return doc; }
+
+exports.dashboardLogin = asyncHandler(async (req, res) => {
+  const email = req.validated.body.email.trim().toLowerCase();
+  const user = await User.findOne({ email }).select('+passwordHash');
+  const invalid = new AppError('Invalid admin credentials', 401);
+  if (!user) throw invalid;
+  const ok = await bcrypt.compare(req.validated.body.password, user.passwordHash);
+  if (!ok || user.isActive === false || user.role !== 'admin') throw invalid;
+  user.lastLoginAt = new Date();
+  await user.save();
+  await systemLog({ type: 'login_attempt', action: 'dashboard.login', actorId: user._id, actorRole: user.role, success: true, message: 'Dashboard login successful', ip: req.ip });
+  return success(res, { user: userDto(user), token: signToken(user) }, 'Dashboard login successful');
+});
+exports.dashboardMe = asyncHandler(async (req, res) => success(res, userDto(req.authUser), 'Dashboard profile loaded'));
+
+exports.users = asyncHandler(async (req, res) => {
+  const p = pagination(req.validated.query); const filter = {};
+  if (req.validated.query.q) filter.$or = [{ fullName: rx(req.validated.query.q) }, { email: rx(req.validated.query.q) }, { phoneNumber: rx(req.validated.query.q) }];
+  if (req.validated.query.role) filter.role = req.validated.query.role;
+  const active = req.validated.query.isActive ?? req.validated.query.is_active;
+  if (active !== undefined) filter.isActive = active;
+  const [rows, total] = await Promise.all([User.find(filter).sort({ createdAt: -1 }).skip(p.skip).limit(p.limit).lean(), User.countDocuments(filter)]);
+  return success(res, { data: rows.map(userDto), pagination: meta(p, total) }, 'Users loaded');
+});
+exports.getUser = asyncHandler(async (req, res) => success(res, userDto(await requireDoc(User, req.validated.params.id, 'User')), 'User loaded'));
+exports.createUser = asyncHandler(async (req, res) => {
+  const data = cleanUserPayload(req.validated.body, true);
+  const exists = await User.findOne({ email: data.email }); if (exists) throw new AppError('Email already exists', 409);
+  data.passwordHash = await bcrypt.hash(req.validated.body.password, env.bcryptSaltRounds);
+  const user = await User.create(data);
+  await systemLog({ type: 'admin_action', action: 'admin.users.create', actorId: req.authUser._id, actorRole: req.authRole, message: 'User created', metadata: { userId: user._id } });
+  return success(res, userDto(user), 'User created', 201);
+});
+exports.updateUser = asyncHandler(async (req, res) => {
+  const user = await requireDoc(User, req.validated.params.id, 'User');
+  const data = cleanUserPayload(req.validated.body);
+  if (data.email && data.email !== user.email) { const exists = await User.findOne({ email: data.email, _id: { $ne: user._id } }); if (exists) throw new AppError('Email already exists', 409); }
+  Object.assign(user, data);
+  if (req.validated.body.password) { user.passwordHash = await bcrypt.hash(req.validated.body.password, env.bcryptSaltRounds); user.passwordChangedAt = new Date(); }
+  await user.save();
+  await systemLog({ type: 'admin_action', action: 'admin.users.update', actorId: req.authUser._id, actorRole: req.authRole, message: 'User updated', metadata: { userId: user._id } });
+  return success(res, userDto(user), 'User updated');
+});
+exports.deleteUser = asyncHandler(async (req, res) => { const deleted = await User.findByIdAndDelete(req.validated.params.id); if (!deleted) throw new AppError('User not found', 404); await systemLog({ type: 'admin_action', action: 'admin.users.delete', actorId: req.authUser._id, actorRole: req.authRole, message: 'User deleted', metadata: { userId: deleted._id } }); return success(res, { deleted: true }, 'User deleted'); });
+
+exports.pharmacies = asyncHandler(async (req, res) => {
+  const p = pagination(req.validated.query); const filter = {};
+  if (req.validated.query.q) filter.$or = [{ name: rx(req.validated.query.q) }, { address: rx(req.validated.query.q) }, { phone: rx(req.validated.query.q) }, { email: rx(req.validated.query.q) }];
+  if (req.validated.query.status) filter.status = req.validated.query.status;
+  if (req.validated.query.ownerId || req.validated.query.owner_id) filter.ownerId = req.validated.query.ownerId || req.validated.query.owner_id;
+  const [rows, total] = await Promise.all([Pharmacy.find(filter).sort({ createdAt: -1 }).skip(p.skip).limit(p.limit).lean(), Pharmacy.countDocuments(filter)]);
+  return success(res, { data: rows.map(pharmacyDto), pagination: meta(p, total) }, 'Pharmacies loaded');
+});
+exports.getPharmacy = asyncHandler(async (req, res) => success(res, pharmacyDto(await requireDoc(Pharmacy, req.validated.params.id, 'Pharmacy')), 'Pharmacy loaded'));
+exports.createPharmacy = asyncHandler(async (req, res) => { const pharmacy = await Pharmacy.create({ status: 'active', ...cleanPharmacyPayload(req.validated.body) }); await systemLog({ type: 'admin_action', action: 'admin.pharmacies.create', actorId: req.authUser._id, actorRole: req.authRole, message: 'Pharmacy created', metadata: { pharmacyId: pharmacy._id } }); return success(res, pharmacyDto(pharmacy), 'Pharmacy created', 201); });
+exports.updatePharmacy = asyncHandler(async (req, res) => { const pharmacy = await requireDoc(Pharmacy, req.validated.params.id, 'Pharmacy'); Object.assign(pharmacy, cleanPharmacyPayload(req.validated.body)); await pharmacy.save(); await systemLog({ type: 'admin_action', action: 'admin.pharmacies.update', actorId: req.authUser._id, actorRole: req.authRole, message: 'Pharmacy updated', metadata: { pharmacyId: pharmacy._id } }); return success(res, pharmacyDto(pharmacy), 'Pharmacy updated'); });
+exports.deletePharmacy = asyncHandler(async (req, res) => { const deleted = await Pharmacy.findByIdAndDelete(req.validated.params.id); if (!deleted) throw new AppError('Pharmacy not found', 404); await InventorySnapshot.deleteMany({ pharmacyId: deleted._id }); await systemLog({ type: 'admin_action', action: 'admin.pharmacies.delete', actorId: req.authUser._id, actorRole: req.authRole, message: 'Pharmacy deleted', metadata: { pharmacyId: deleted._id } }); return success(res, { deleted: true }, 'Pharmacy deleted'); });
+
+exports.drugs = asyncHandler(async (req, res) => {
+  const p = pagination(req.validated.query); const filter = {};
+  if (req.validated.query.q) filter.$or = [{ genericName: rx(req.validated.query.q) }, { brandNames: rx(req.validated.query.q) }, { aliases: rx(req.validated.query.q) }, { searchText: rx(req.validated.query.q) }];
+  if (req.validated.query.category) filter.category = rx(req.validated.query.category);
+  const active = req.validated.query.isActive ?? req.validated.query.is_active;
+  if (active !== undefined) filter.isActive = active;
+  const [rows, total] = await Promise.all([Drug.find(filter).sort({ genericName: 1 }).skip(p.skip).limit(p.limit).lean(), Drug.countDocuments(filter)]);
+  return success(res, { data: rows.map(drugDto), pagination: meta(p, total) }, 'Drugs loaded');
+});
+exports.getDrug = asyncHandler(async (req, res) => success(res, drugDto(await requireDoc(Drug, req.validated.params.id, 'Drug')), 'Drug loaded'));
+exports.createDrug = asyncHandler(async (req, res) => { const data = cleanDrugPayload(req.validated.body); await ensureCategory(data.category); const drug = await Drug.create(data); await systemLog({ type: 'admin_action', action: 'admin.drugs.create', actorId: req.authUser._id, actorRole: req.authRole, message: 'Drug created', metadata: { drugId: drug._id } }); return success(res, drugDto(drug), 'Drug created', 201); });
+exports.updateDrug = asyncHandler(async (req, res) => { const drug = await requireDoc(Drug, req.validated.params.id, 'Drug'); Object.assign(drug, cleanDrugPayload(req.validated.body)); await ensureCategory(drug.category); await drug.save(); await systemLog({ type: 'admin_action', action: 'admin.drugs.update', actorId: req.authUser._id, actorRole: req.authRole, message: 'Drug updated', metadata: { drugId: drug._id } }); return success(res, drugDto(drug), 'Drug updated'); });
+exports.deleteDrug = asyncHandler(async (req, res) => { const deleted = await Drug.findByIdAndDelete(req.validated.params.id); if (!deleted) throw new AppError('Drug not found', 404); await InventorySnapshot.deleteMany({ drugId: deleted._id }); await systemLog({ type: 'admin_action', action: 'admin.drugs.delete', actorId: req.authUser._id, actorRole: req.authRole, message: 'Drug deleted', metadata: { drugId: deleted._id } }); return success(res, { deleted: true }, 'Drug deleted'); });
+
+exports.categories = asyncHandler(async (req, res) => { const p = pagination(req.validated.query); const filter = req.validated.query.q ? { name: rx(req.validated.query.q) } : {}; const [rows, total] = await Promise.all([Category.find(filter).sort({ name: 1 }).skip(p.skip).limit(p.limit).lean(), Category.countDocuments(filter)]); return success(res, { data: rows.map(categoryDto), pagination: meta(p, total) }, 'Categories loaded'); });
+exports.getCategory = asyncHandler(async (req, res) => success(res, categoryDto(await requireDoc(Category, req.validated.params.id, 'Category')), 'Category loaded'));
+exports.createCategory = asyncHandler(async (req, res) => { const category = await Category.create(req.validated.body); await systemLog({ type: 'admin_action', action: 'admin.categories.create', actorId: req.authUser._id, actorRole: req.authRole, message: 'Category created', metadata: { categoryId: category._id } }); return success(res, categoryDto(category), 'Category created', 201); });
+exports.updateCategory = asyncHandler(async (req, res) => { const category = await requireDoc(Category, req.validated.params.id, 'Category'); Object.assign(category, req.validated.body); await category.save(); await systemLog({ type: 'admin_action', action: 'admin.categories.update', actorId: req.authUser._id, actorRole: req.authRole, message: 'Category updated', metadata: { categoryId: category._id } }); return success(res, categoryDto(category), 'Category updated'); });
+exports.deleteCategory = asyncHandler(async (req, res) => { const deleted = await Category.findByIdAndDelete(req.validated.params.id); if (!deleted) throw new AppError('Category not found', 404); await systemLog({ type: 'admin_action', action: 'admin.categories.delete', actorId: req.authUser._id, actorRole: req.authRole, message: 'Category deleted', metadata: { categoryId: deleted._id } }); return success(res, { deleted: true }, 'Category deleted'); });
+
+exports.inventory = asyncHandler(async (req, res) => {
+  const p = pagination(req.validated.query); const filter = {};
+  if (req.validated.query.pharmacyId || req.validated.query.pharmacy_id) filter.pharmacyId = req.validated.query.pharmacyId || req.validated.query.pharmacy_id;
+  if (req.validated.query.drugId || req.validated.query.drug_id) filter.drugId = req.validated.query.drugId || req.validated.query.drug_id;
+  const low = req.validated.query.lowStock ?? req.validated.query.low_stock;
+  if (low !== undefined) filter.quantity = { $lte: low };
+  const [rows, total] = await Promise.all([InventorySnapshot.find(filter).populate('pharmacyId').populate('drugId').sort({ updatedAt: -1 }).skip(p.skip).limit(p.limit).lean(), InventorySnapshot.countDocuments(filter)]);
+  let data = rows.map(inventoryDto);
+  if (req.validated.query.q) { const q = String(req.validated.query.q).toLowerCase(); data = data.filter((x) => (x.pharmacy?.name || '').toLowerCase().includes(q) || (x.drug?.name || '').toLowerCase().includes(q)); }
+  return success(res, { data, pagination: meta(p, total) }, 'Inventory loaded');
+});
+exports.getInventoryItem = asyncHandler(async (req, res) => { const item = await InventorySnapshot.findById(req.validated.params.id).populate('pharmacyId').populate('drugId').lean(); if (!item) throw new AppError('Inventory item not found', 404); return success(res, inventoryDto(item), 'Inventory item loaded'); });
+exports.createInventoryItem = asyncHandler(async (req, res) => { const pharmacyId = req.validated.body.pharmacyId || req.validated.body.pharmacy_id; const drugId = req.validated.body.drugId || req.validated.body.drug_id; await requireDoc(Pharmacy, pharmacyId, 'Pharmacy'); await requireDoc(Drug, drugId, 'Drug'); const item = await InventorySnapshot.findOneAndUpdate({ pharmacyId, drugId }, { $set: { quantity: req.validated.body.quantity, price: req.validated.body.price || 0, updatedAt: new Date(), source: 'dashboard' }, $setOnInsert: { createdAt: new Date() } }, { upsert: true, new: true }).populate('pharmacyId').populate('drugId'); await systemLog({ type: 'admin_action', action: 'admin.inventory.upsert', actorId: req.authUser._id, actorRole: req.authRole, message: 'Inventory item upserted', metadata: { pharmacyId, drugId } }); return success(res, inventoryDto(item), 'Inventory item saved', 201); });
+exports.updateInventoryItem = asyncHandler(async (req, res) => { const item = await requireDoc(InventorySnapshot, req.validated.params.id, 'Inventory item'); if (req.validated.body.pharmacyId || req.validated.body.pharmacy_id) item.pharmacyId = req.validated.body.pharmacyId || req.validated.body.pharmacy_id; if (req.validated.body.drugId || req.validated.body.drug_id) item.drugId = req.validated.body.drugId || req.validated.body.drug_id; if (req.validated.body.quantity !== undefined) item.quantity = req.validated.body.quantity; if (req.validated.body.price !== undefined) item.price = req.validated.body.price; item.updatedAt = new Date(); item.source = 'dashboard'; await item.save(); await item.populate('pharmacyId'); await item.populate('drugId'); await systemLog({ type: 'admin_action', action: 'admin.inventory.update', actorId: req.authUser._id, actorRole: req.authRole, message: 'Inventory item updated', metadata: { inventoryId: item._id } }); return success(res, inventoryDto(item), 'Inventory item updated'); });
+exports.deleteInventoryItem = asyncHandler(async (req, res) => { const deleted = await InventorySnapshot.findByIdAndDelete(req.validated.params.id); if (!deleted) throw new AppError('Inventory item not found', 404); await systemLog({ type: 'admin_action', action: 'admin.inventory.delete', actorId: req.authUser._id, actorRole: req.authRole, message: 'Inventory item deleted', metadata: { inventoryId: deleted._id } }); return success(res, { deleted: true }, 'Inventory item deleted'); });
+exports.syncInventory = asyncHandler(async (req, res) => { const pharmacyId = req.validated.body.pharmacyId || req.validated.body.pharmacy_id; await requireDoc(Pharmacy, pharmacyId, 'Pharmacy'); const drugIds = req.validated.body.inventory.map((item) => item.drugId || item.drug_id); const found = await Drug.find({ _id: { $in: drugIds } }).select('_id').lean(); const foundSet = new Set(found.map((d) => String(d._id))); const missing = drugIds.filter((x) => !foundSet.has(String(x))); if (missing.length) throw new AppError('Some drugs were not found', 404, { missing_drug_ids: missing }); const now = new Date(); const ops = req.validated.body.inventory.map((item) => ({ updateOne: { filter: { pharmacyId: new mongoose.Types.ObjectId(pharmacyId), drugId: new mongoose.Types.ObjectId(item.drugId || item.drug_id) }, update: { $set: { quantity: item.quantity, price: item.price || 0, updatedAt: now, source: 'dashboard_sync' }, $setOnInsert: { createdAt: now } }, upsert: true } })); const result = await InventorySnapshot.bulkWrite(ops, { ordered: false }); await systemLog({ type: 'sync', action: 'admin.inventory.sync', actorId: req.authUser._id, actorRole: req.authRole, message: 'Dashboard inventory synced', metadata: { pharmacyId, items: req.validated.body.inventory.length } }); return success(res, { pharmacy_id: pharmacyId, synced_items: req.validated.body.inventory.length, matched: result.matchedCount, modified: result.modifiedCount, upserted: result.upsertedCount, updated_at: now }, 'Inventory synced'); });
+
+async function listLogs(req, res, forcedSource = null) {
+  const p = pagination(req.validated.query);
+  const source = forcedSource || req.validated.query.source;
+  const isAi = source === 'ai' || req.validated.query.type === 'ai';
+  const model = isAi ? AiLog : SystemLog;
+  const filter = {};
+  if (isAi && req.validated.query.status) filter.status = req.validated.query.status;
+  if (!isAi && req.validated.query.type) filter.type = req.validated.query.type;
+  if (!isAi && req.validated.query.success !== undefined) filter.success = req.validated.query.success;
+  if (req.validated.query.q) {
+    filter.$or = isAi
+      ? [{ extractedText: rx(req.validated.query.q) }, { extractedDrugs: rx(req.validated.query.q) }, { errorMessage: rx(req.validated.query.q) }]
+      : [{ action: rx(req.validated.query.q) }, { message: rx(req.validated.query.q) }];
+  }
+  const [rows, total] = await Promise.all([
+    model.find(filter).sort({ createdAt: -1 }).skip(p.skip).limit(p.limit).lean(),
+    model.countDocuments(filter)
+  ]);
+  return success(res, { data: rows.map(logDto), pagination: meta(p, total) }, isAi ? 'AI logs loaded' : 'System logs loaded');
+}
+
+exports.logs = asyncHandler(async (req, res) => listLogs(req, res));
+exports.aiLogs = asyncHandler(async (req, res) => listLogs(req, res, 'ai'));
+exports.systemLogs = asyncHandler(async (req, res) => listLogs(req, res, 'system'));
+exports.getLog = asyncHandler(async (req, res) => {
+  const source = req.validated.query.source === 'ai' ? 'ai' : 'system';
+  const model = source === 'ai' ? AiLog : SystemLog;
+  const log = await model.findById(req.validated.params.id).lean();
+  if (!log) throw new AppError('Log not found', 404);
+  return success(res, logDto(log), 'Log loaded');
+});
+exports.deleteLog = asyncHandler(async (req, res) => {
+  const source = req.validated.query.source === 'ai' ? 'ai' : 'system';
+  const model = source === 'ai' ? AiLog : SystemLog;
+  const deleted = await model.findByIdAndDelete(req.validated.params.id);
+  if (!deleted) throw new AppError('Log not found', 404);
+  return success(res, { deleted: true }, 'Log deleted');
+});
+
+exports.analytics = asyncHandler(async (_req, res) => {
+  const [users, admins, pharmacists, patients, pharmacies, activePharmacies, drugs, categories, inventory, availableInventory, aiLogs, failedAiLogs, syncLogs, loginAttempts, lowStockItems] = await Promise.all([
+    User.countDocuments(), User.countDocuments({ role: 'admin' }), User.countDocuments({ role: 'pharmacist' }), User.countDocuments({ role: 'patient' }), Pharmacy.countDocuments(), Pharmacy.countDocuments({ status: { $in: ['active', 'approved'] } }), Drug.countDocuments({ isActive: { $ne: false } }), Category.countDocuments(), InventorySnapshot.countDocuments(), InventorySnapshot.countDocuments({ quantity: { $gt: 0 } }), AiLog.countDocuments(), AiLog.countDocuments({ status: 'failed' }), SystemLog.countDocuments({ type: 'sync' }), SystemLog.countDocuments({ type: 'login_attempt' }), InventorySnapshot.countDocuments({ quantity: { $lte: 5 } })
+  ]);
+  const recentLogs = await SystemLog.find({}).sort({ createdAt: -1 }).limit(10).lean();
+  return success(res, { users, admins, pharmacists, patients, pharmacies, active_pharmacies: activePharmacies, drugs, categories, inventory_items: inventory, available_inventory_items: availableInventory, low_stock_items: lowStockItems, ai_logs: aiLogs, failed_ai_logs: failedAiLogs, sync_logs: syncLogs, login_attempts: loginAttempts, recent_logs: recentLogs.map(logDto) }, 'Analytics loaded');
+});
+
+exports.settings = asyncHandler(async (_req, res) => success(res, { node_env: env.nodeEnv, port: env.port, gemini_model: env.geminiModel, cors_origins: env.corsOrigins, upload_dir: env.uploadDir, max_file_size_mb: env.maxFileSizeMb }, 'Dashboard settings loaded'));

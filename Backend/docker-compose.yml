@@ -1,0 +1,39 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: adwety-mongo
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    volumes:
+      - adwety_mongo_data:/data/db
+
+  backend:
+    build: .
+    container_name: adwety-backend
+    restart: unless-stopped
+    ports:
+      - "6500:6500"
+    environment:
+      NODE_ENV: production
+      PORT: 6500
+
+      MONGO_URI: mongodb://mongo:27017/adwety
+      MONGODB_URI: mongodb://mongo:27017/adwety
+      DATABASE_URL: mongodb://mongo:27017/adwety
+
+      JWT_SECRET: adwety-super-secret-change-this
+      JWT_EXPIRES_IN: 2h
+      JWT_AUDIENCE: adwety-client
+      JWT_ISSUER: adwety-backend
+
+      CORS_ORIGIN: http://localhost:6501
+      FRONTEND_URL: http://localhost:6501
+
+    depends_on:
+      - mongo
+    volumes:
+      - ./private_uploads:/app/private_uploads
+
+volumes:
+  adwety_mongo_data:
