@@ -1,4 +1,5 @@
 const asyncHandler = require('../../utils/async-handler');
+const { AppError } = require('../../utils/helpers');
 
 const { findMatches } = require('../../services/drug-matching.service');
 const { callGemini, heuristicExtract } = require('../../services/ai.service');
@@ -13,6 +14,7 @@ const {
 exports.scanPrescription = asyncHandler(async (req, res) => {
   const uploadedFile = file(req);
   const text = req.validated.body.text || req.validated.body.mock_text || '';
+  if (!uploadedFile && !String(text).trim()) throw new AppError('Prescription text or file is required', 422);
 
   let extracted;
   let raw;
@@ -56,14 +58,6 @@ exports.scanPrescription = asyncHandler(async (req, res) => {
     }
   }
 
-  if (!drugs.length && !text && !uploadedFile) {
-    const demo = await Drug.find({ isActive: { $ne: false } })
-      .sort({ genericName: 1 })
-      .limit(3)
-      .lean();
-
-    drugs.push(...demo.map(drugDto));
-  }
 
   await aiLog({
     userId: req.authUser?._id || null,
@@ -71,7 +65,8 @@ exports.scanPrescription = asyncHandler(async (req, res) => {
     extractedDrugs: drugs.map((x) => x.name),
     confidence: drugs.length ? 0.65 : 0,
     status: 'completed',
-    provider: 'gemini'
+    provider: 'gemini',
+    consentToStore: req.validated.body.consentToStore ?? req.validated.body.consent_to_store ?? false
   });
 
   return res.json(drugs);

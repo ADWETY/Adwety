@@ -13,6 +13,7 @@ const schema = withJsonTransform(new mongoose.Schema({
   longitude: { type: Number, min: -180, max: 180, required: true },
   location: { type: pointSchema, required: true, default: () => ({ type: 'Point', coordinates: [31.2357, 30.0444] }) },
   workingHours: { type: String, default: '' },
+  googleMapsUrl: { type: String, default: '', trim: true },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   rating: { type: Number, min: 0, max: 5, default: 0 }
 }, { timestamps: true, collection: 'pharmacies' }));

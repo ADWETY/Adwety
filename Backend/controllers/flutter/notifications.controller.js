@@ -1,46 +1,23 @@
-const asyncHandler = require('../../utils/async-handler');
+'use strict';
 
-const {
-  InventorySnapshot,
-  notificationDto
-} = require('./common');
+const asyncHandler = require('../../utils/async-handler');
+const notificationService = require('../../services/notification.service');
 
 exports.notifications = asyncHandler(async (req, res) => {
-  const page = req.validated.query.page;
-  const limit = req.validated.query.limit;
-  const skip = (page - 1) * limit;
-
-  const filter = {
-    quantity: { $lte: 10 }
-  };
-
-  const [total, rows] = await Promise.all([
-    InventorySnapshot.countDocuments(filter),
-    InventorySnapshot.find(filter)
-      .populate('drugId')
-      .populate('pharmacyId')
-      .sort({ quantity: 1, updatedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean()
-  ]);
-
-  return res.json({
-    data: rows.map(notificationDto),
-    pagination: {
-      page,
-      limit,
-      total,
-      pages: Math.ceil(total / limit)
-    }
+  const result = await notificationService.listForUser({
+    user: req.authUser,
+    role: req.authRole,
+    page: req.validated.query.page,
+    limit: req.validated.query.limit
   });
+  return res.json(result);
 });
 
 exports.markNotificationRead = asyncHandler(async (req, res) => {
-  return res.json({
+  const row = await notificationService.markReadForUser({
     id: req.validated.params.id,
-    read: true,
-    is_read: true,
-    read_at: new Date().toISOString()
+    user: req.authUser,
+    role: req.authRole
   });
+  return res.json(row);
 });

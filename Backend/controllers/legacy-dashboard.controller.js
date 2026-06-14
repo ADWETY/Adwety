@@ -1,21 +1,21 @@
-const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const { User, Pharmacy, Drug, Category, InventorySnapshot, AiLog, SystemLog } = require('../models');
-const env = require('../config/env');
 const asyncHandler = require('../utils/async-handler');
 const { success } = require('../utils/response');
-const { signToken } = require('../services/token.service');
+const { beginLogin } = require('../services/login.service');
+const { hashPassword } = require('../services/password.service');
+const { createSessionTokens, invalidateUserSessions } = require('../services/session.service');
 const { AppError, isValidObjectId, validateObjectId, pagination, escapeRegex } = require('../utils/helpers');
 const { findMatches, serializeDrug } = require('../services/drug-matching.service');
 const { callGemini } = require('../services/ai.service');
-const { systemLog } = require('../services/logging.service');
+const { systemLog, aiLog } = require('../services/logging.service');
 
 function normalizeRole(role) {
   const aliases = { owner: 'admin', super_admin: 'admin', support_admin: 'admin', pharmacy_admin: 'pharmacist', user: 'patient' };
   return aliases[role] || role || 'patient';
 }
 
-function userDto(user, token = undefined) {
+function userDto(user, tokens = undefined) {
   const data = {
     id: String(user._id),
     _id: String(user._id),
@@ -33,7 +33,7 @@ function userDto(user, token = undefined) {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
-  if (token !== undefined) data.token = token;
+  if (tokens !== undefined) { data.token = tokens?.token || tokens?.access_token || tokens; data.access_token = tokens?.access_token || tokens?.token || null; data.refresh_token = tokens?.refresh_token || null; data.expires_in = tokens?.expires_in || null; }
   return data;
 }
 
@@ -130,6 +130,27 @@ function assertDashboard(req) {
   if (!['admin', 'pharmacist'].includes(role)) throw new AppError('Forbidden: dashboard access required', 403);
 }
 
+async function resolveInventoryPharmacyId(req, suppliedPharmacyId, { requiredForAdmin = false } = {}) {
+  const role = normalizeRole(req.authRole);
+  if (role === 'admin') {
+    if (suppliedPharmacyId && !isValidObjectId(suppliedPharmacyId)) throw new AppError('Invalid pharmacyId format', 422);
+    if (requiredForAdmin && !suppliedPharmacyId) throw new AppError('pharmacyId is required', 422);
+    return suppliedPharmacyId || null;
+  }
+
+  if (role !== 'pharmacist') throw new AppError('Forbidden: inventory access denied', 403);
+  let ownedPharmacyId = req.authUser.pharmacyId ? String(req.authUser.pharmacyId) : '';
+  if (!ownedPharmacyId) {
+    const owned = await Pharmacy.findOne({ ownerId: req.authUser._id, status: { $in: ['approved', 'active'] } }).select('_id').lean();
+    ownedPharmacyId = owned?._id ? String(owned._id) : '';
+  }
+  if (!ownedPharmacyId) throw new AppError('No approved pharmacy is linked to this pharmacist', 403);
+  if (suppliedPharmacyId && String(suppliedPharmacyId) !== ownedPharmacyId) {
+    throw new AppError('Forbidden: pharmacists cannot access another pharmacy inventory', 403);
+  }
+  return ownedPharmacyId;
+}
+
 async function ensureCategory(name) {
   if (!name) return null;
   return Category.findOneAndUpdate({ name }, { $setOnInsert: { description: '' } }, { upsert: true, new: true });
@@ -149,35 +170,18 @@ function drugPayload(body, existing = {}) {
 }
 
 exports.register = asyncHandler(async (req, res) => {
-  const body = req.body || {};
-  const email = bodyString(body, ['email']).toLowerCase();
-  const password = bodyString(body, ['password']);
-  const fullName = bodyString(body, ['fullName', 'full_name', 'name']);
-  if (!email || !password || !fullName) throw new AppError('name, email and password are required', 422);
-  const role = normalizeRole(body.role);
-  if (role === 'admin' && !env.allowAdminRegister) throw new AppError('Admin self-registration is disabled', 403);
-  const exists = await User.findOne({ email });
-  if (exists) throw new AppError('Email already exists', 409);
-  const passwordHash = await bcrypt.hash(password, env.bcryptSaltRounds);
-  const user = await User.create({ fullName, email, passwordHash, role, phoneNumber: body.phoneNumber || body.phone_number || '' });
-  const token = signToken(user);
-  return success(res, userDto(user, token), 'Register successful', 201);
+  const body=req.body||{}; const email=bodyString(body,['email']).toLowerCase(); const password=bodyString(body,['password']); const fullName=bodyString(body,['fullName','full_name','name']);
+  if(!email||!password||!fullName) throw new AppError('name, email and password are required',422);
+  if(await User.findOne({email})) throw new AppError('Email already exists',409);
+  const user=await User.create({fullName,email,passwordHash:await hashPassword(password,{email,fullName}),passwordPolicyVersion:2,role:'patient',phoneNumber:body.phoneNumber||body.phone_number||''});
+  const tokens=await createSessionTokens(user,req); return success(res,userDto(user,tokens),'Register successful',201);
 });
 
-exports.login = asyncHandler(async (req, res) => {
-  const body = req.body || {};
-  const email = bodyString(body, ['email']).toLowerCase();
-  const password = bodyString(body, ['password']);
-  const user = await User.findOne({ email }).select('+passwordHash');
-  if (!user || !(await bcrypt.compare(password, user.passwordHash)) || user.isActive === false) {
-    await systemLog({ type: 'login_attempt', action: 'legacy.auth.login', success: false, message: 'Invalid dashboard login', metadata: { email }, ip: req.ip });
-    throw new AppError('Invalid email or password', 401);
-  }
-  user.lastLoginAt = new Date();
-  await user.save();
-  const token = signToken(user);
-  await systemLog({ type: 'login_attempt', action: 'legacy.auth.login', actorId: user._id, actorRole: user.role, success: true, message: 'Dashboard login successful', ip: req.ip });
-  return success(res, userDto(user, token), 'Login successful');
+exports.login = asyncHandler(async (req,res)=>{
+  const result=await beginLogin(bodyString(req.body||{},['email']),bodyString(req.body||{},['password']),req);
+  await systemLog({type:'login_attempt',action:'legacy.auth.login',actorId:result.user._id,actorRole:result.user.role,success:true,message:result.mfa?'Password verified; MFA required':'Login successful',ip:req.ip});
+  if(result.mfa) return success(res,{user:userDto(result.user),...result.mfa},'MFA verification required');
+  return success(res,userDto(result.user,result.tokens),'Login successful');
 });
 
 exports.logout = asyncHandler(async (_req, res) => success(res, { logged_out: true }, 'Logout successful'));
@@ -203,6 +207,7 @@ exports.listMedicines = asyncHandler(async (req, res) => {
   }
   if (req.query.category) filter.category = new RegExp(`^${escapeRegex(req.query.category)}$`, 'i');
   if (req.query.isActive !== undefined || req.query.is_active !== undefined) filter.isActive = String(req.query.isActive ?? req.query.is_active) !== 'false';
+  else filter.isActive = { $ne: false };
   const [rows, total] = await Promise.all([Drug.find(filter).sort({ genericName: 1 }).skip(p.skip).limit(p.limit).lean(), Drug.countDocuments(filter)]);
   return success(res, { data: rows.map(drugDto), pagination: listMeta(req.query, total) }, 'Medicines loaded');
 });
@@ -224,21 +229,22 @@ exports.getMedicine = asyncHandler(async (req, res) => {
 });
 
 exports.createMedicine = asyncHandler(async (req, res) => {
-  assertDashboard(req);
+  assertAdmin(req);
   const data = drugPayload(req.body || {});
   if (!data.genericName || !data.dosageForm || !data.strength) throw new AppError('genericName/name, dosageForm/form and strength are required', 422);
   await ensureCategory(data.category);
-  const drug = await Drug.create(data);
+  const drug = await Drug.create({ ...data, isActive: true });
   return success(res, drugDto(drug), 'Medicine created', 201);
 });
 
 exports.updateMedicine = asyncHandler(async (req, res) => {
-  assertDashboard(req);
+  assertAdmin(req);
   validateObjectId(req.params.id);
   const drug = await Drug.findById(req.params.id);
   if (!drug) throw new AppError('Medicine not found', 404);
   const data = drugPayload(req.body || {}, drug.toObject());
   Object.assign(drug, data);
+  drug.isActive = true;
   await ensureCategory(drug.category);
   await drug.save();
   return success(res, drugDto(drug), 'Medicine updated');
@@ -329,21 +335,54 @@ exports.notifications = asyncHandler(async (_req, res) => success(res, { data: [
 exports.scanPrescription = asyncHandler(async (req, res) => {
   const firstFile = Array.isArray(req.files) ? req.files[0] : req.file;
   const text = req.body?.text || req.body?.prescriptionText || req.body?.mock_text || '';
+  if (!firstFile && !String(text).trim()) throw new AppError('Prescription text or file is required', 422);
   const raw = await callGemini({ buffer: firstFile?.buffer, mimeType: firstFile?.mimetype, text });
   const extracted = Array.isArray(raw.drugs) ? raw.drugs : [];
   const matched = [];
   for (const item of extracted) {
     const extractedName = item.extracted_name || item.name || '';
     const matches = await findMatches(extractedName, { limit: 1, threshold: 0.45 });
+    const match = matches[0] || null;
+    let matchedDrug = match?.drug || null;
+    if (match?.matchedDrugId) {
+      const availability = await InventorySnapshot.find({ drugId: match.matchedDrugId, quantity: { $gt: 0 } })
+        .populate('pharmacyId')
+        .sort({ quantity: -1, updatedAt: -1 })
+        .limit(50)
+        .lean();
+      matchedDrug = {
+        ...(matchedDrug || {}),
+        id: String(match.matchedDrugId),
+        name: matchedDrug?.name || matchedDrug?.genericName || matchedDrug?.generic_name || match.matchedDrugName || extractedName,
+        pharmacies: availability.map((row) => ({
+          id: String(row.pharmacyId?._id || row.pharmacyId || ''),
+          inventory_id: String(row._id),
+          name: row.pharmacyId?.name || '',
+          address: row.pharmacyId?.address || '',
+          price: Number(row.price || 0),
+          quantity: Number(row.quantity || 0)
+        }))
+      };
+    }
     matched.push({
       extracted_name: extractedName,
       confidence: Number(item.confidence_score || item.confidence || 0.5),
-      matched_drug_id: matches[0]?.matchedDrugId || null,
-      matched_drug_name: matches[0]?.matchedDrugName || null,
-      matched_drug: matches[0]?.drug || null,
+      confidence_score: Number(item.confidence_score || item.confidence || 0.5),
+      matched_drug_id: match?.matchedDrugId || null,
+      matched_drug_name: match?.matchedDrugName || null,
+      matched_drug: matchedDrug,
     });
   }
   const result = { extracted_text: raw.extracted_text || text, extracted_drugs: matched, drugs: matched };
+  await aiLog({
+    userId: req.authUser._id,
+    extractedText: raw.extracted_text || text,
+    extractedDrugs: matched.map((item) => item.extracted_name),
+    confidence: matched.length ? matched.reduce((sum, item) => sum + Number(item.confidence || 0), 0) / matched.length : 0,
+    status: 'completed',
+    provider: 'gemini',
+    consentToStore: req.body?.consentToStore === true || req.body?.consent_to_store === true
+  });
   return success(res, result, 'Prescription scanned');
 });
 
@@ -363,7 +402,7 @@ exports.createAdmin = asyncHandler(async (req, res) => {
   if (!email || !password || !fullName) throw new AppError('name, email and password are required', 422);
   const exists = await User.findOne({ email });
   if (exists) throw new AppError('Email already exists', 409);
-  const user = await User.create({ fullName, email, passwordHash: await bcrypt.hash(password, env.bcryptSaltRounds), role: 'admin', phoneNumber: body.phoneNumber || body.phone_number || '' });
+  const user = await User.create({ fullName, email, passwordHash: await hashPassword(password, { email, fullName }), passwordPolicyVersion: 2, mfaPolicyVersion: 2, role: 'admin', phoneNumber: body.phoneNumber || body.phone_number || '' });
   return success(res, userDto(user), 'Admin created', 201);
 });
 
@@ -374,8 +413,10 @@ exports.updateAdmin = asyncHandler(async (req, res) => {
   if (!user) throw new AppError('Admin not found', 404);
   if (req.body?.fullName || req.body?.full_name || req.body?.name) user.fullName = bodyString(req.body, ['fullName', 'full_name', 'name'], user.fullName);
   if (req.body?.phoneNumber !== undefined || req.body?.phone_number !== undefined) user.phoneNumber = req.body.phoneNumber || req.body.phone_number || '';
+  const wasActive = user.isActive !== false;
   if (req.body?.isActive !== undefined || req.body?.is_active !== undefined) user.isActive = req.body.isActive ?? req.body.is_active;
   await user.save();
+  if (wasActive && user.isActive === false) await invalidateUserSessions(user._id, 'admin_disabled', { incrementVersion: true });
   return success(res, userDto(user), 'Admin updated');
 });
 
@@ -421,8 +462,8 @@ exports.legacyAnalytics = asyncHandler(async (req, res) => {
 
 exports.syncInventory = asyncHandler(async (req, res) => {
   assertDashboard(req);
-  const pharmacyId = req.body?.pharmacyId || req.body?.pharmacy_id;
-  if (!isValidObjectId(pharmacyId)) throw new AppError('pharmacyId is required', 422);
+  const suppliedPharmacyId = req.body?.pharmacyId || req.body?.pharmacy_id || null;
+  const pharmacyId = await resolveInventoryPharmacyId(req, suppliedPharmacyId, { requiredForAdmin: true });
   const items = Array.isArray(req.body?.inventory) ? req.body.inventory : [];
   if (!items.length) throw new AppError('inventory array is required', 422);
   const now = new Date();
@@ -433,8 +474,8 @@ exports.syncInventory = asyncHandler(async (req, res) => {
       updateOne: {
         filter: { pharmacyId: new mongoose.Types.ObjectId(pharmacyId), drugId: new mongoose.Types.ObjectId(drugId) },
         update: { $set: { quantity: Number(item.quantity || 0), price: Number(item.price || 0), updatedAt: now, source: 'dashboard_legacy' }, $setOnInsert: { createdAt: now } },
-        upsert: true,
-      },
+        upsert: true
+      }
     };
   });
   const result = await InventorySnapshot.bulkWrite(ops, { ordered: false });
@@ -444,9 +485,18 @@ exports.syncInventory = asyncHandler(async (req, res) => {
 exports.listInventory = asyncHandler(async (req, res) => {
   assertDashboard(req);
   const p = pagination(req.query);
+  const suppliedPharmacyId = req.query.pharmacyId || req.query.pharmacy_id || null;
+  const pharmacyId = await resolveInventoryPharmacyId(req, suppliedPharmacyId, { requiredForAdmin: false });
   const filter = {};
-  if (isValidObjectId(req.query.pharmacyId || req.query.pharmacy_id)) filter.pharmacyId = req.query.pharmacyId || req.query.pharmacy_id;
-  if (isValidObjectId(req.query.drugId || req.query.drug_id || req.query.medicineId || req.query.medicine_id)) filter.drugId = req.query.drugId || req.query.drug_id || req.query.medicineId || req.query.medicine_id;
-  const [rows, total] = await Promise.all([InventorySnapshot.find(filter).sort({ updatedAt: -1 }).skip(p.skip).limit(p.limit).lean(), InventorySnapshot.countDocuments(filter)]);
+  if (pharmacyId) filter.pharmacyId = pharmacyId;
+  const drugId = req.query.drugId || req.query.drug_id || req.query.medicineId || req.query.medicine_id;
+  if (drugId) {
+    if (!isValidObjectId(drugId)) throw new AppError('Invalid drugId format', 422);
+    filter.drugId = drugId;
+  }
+  const [rows, total] = await Promise.all([
+    InventorySnapshot.find(filter).sort({ updatedAt: -1 }).skip(p.skip).limit(p.limit).lean(),
+    InventorySnapshot.countDocuments(filter)
+  ]);
   return success(res, { data: rows.map(inventoryDto), pagination: listMeta(req.query, total) }, 'Inventory loaded');
 });

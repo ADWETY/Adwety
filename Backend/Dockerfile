@@ -3,11 +3,12 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-RUN npm ci --omit=dev
+COPY --chown=node:node . .
+RUN mkdir -p /app/private_uploads && chown -R node:node /app/private_uploads
 
-COPY . .
-
+ENV NODE_ENV=production
+USER node
 EXPOSE 6500
-
-CMD ["npm", "start"]
+CMD ["node", "index.js"]

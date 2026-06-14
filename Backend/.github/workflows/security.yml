@@ -1,0 +1,88 @@
+name: Backend security gates
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  test-and-scan:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_MONGODB_URI: mongodb://127.0.0.1:27017/adwety_security_test
+      NODE_ENV: test
+      PASSWORD_BREACH_CHECK: off
+      REDIS_REQUIRED: "false"
+      CLAMAV_REQUIRED: "false"
+      TRUST_PROXY: "false"
+      TRUST_PROXY_REQUIRED: "false"
+      JWT_SECRET: jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+      OTP_HASH_SECRET: oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
+      REFRESH_TOKEN_SECRET: rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
+      PASSWORD_PEPPER: pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+      DATA_ENCRYPTION_KEY: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+      MFA_ENCRYPTION_KEY: mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run security:check
+      - run: npm run test:security:integration
+      - run: npm audit --audit-level=high
+
+  codeql:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v3
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dast-staging:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require staging URL
+        env:
+          STAGING_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+        run: test -n "$STAGING_BASE_URL"
+      - name: Run OWASP ZAP baseline
+        env:
+          STAGING_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+        run: bash scripts/dast-staging.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-baseline-report
+          path: security-reports/

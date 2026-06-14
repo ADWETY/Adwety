@@ -1,0 +1,133 @@
+openapi: 3.0.3
+info:
+  title: ADWETY security-focused staging scan
+  version: 1.0.0
+servers:
+  - url: https://staging.invalid
+paths:
+  /health:
+    get:
+      responses:
+        '200': { description: Health response }
+  /api/v1/meta:
+    get:
+      responses:
+        '200': { description: API metadata }
+  /api/v1/auth/register:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, email, password]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 100 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '200': { description: Registration response }
+        '201': { description: Registration created }
+        '422': { description: Validation rejected }
+        '429': { description: Rate limited }
+  /api/v1/auth/login:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, maxLength: 128 }
+      responses:
+        '200': { description: Login response }
+        '401': { description: Authentication failed }
+        '429': { description: Rate limited }
+  /api/v1/auth/forgot-password:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { description: Generic reset response }
+        '429': { description: Rate limited }
+  /api/v1/mobile/analytics:
+    get:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Administrator analytics }
+        '401': { description: Authentication required }
+        '403': { description: Administrator and recent MFA required }
+  /api/v1/mobile/notifications/000000000000000000000000/read:
+    patch:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Notification updated }
+        '401': { description: Authentication required }
+        '404': { description: Not found or inaccessible }
+  /api/v1/inventory/sync:
+    post:
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [inventory]
+              properties:
+                pharmacyId: { type: string }
+                inventory:
+                  type: array
+                  maxItems: 2
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [drugId, quantity, price]
+                    properties:
+                      drugId: { type: string }
+                      quantity: { type: integer, minimum: 0 }
+                      price: { type: number, minimum: 0 }
+      responses:
+        '200': { description: Inventory synchronized }
+        '401': { description: Authentication required }
+        '403': { description: Tenant boundary rejected }
+        '422': { description: Validation rejected }
+  /api/v1/ai/prescription:
+    post:
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text]
+              properties:
+                text: { type: string, maxLength: 5000 }
+      responses:
+        '200': { description: Structured extraction }
+        '401': { description: Authentication required }
+        '422': { description: Validation rejected }
+        '429': { description: Quota or rate limit reached }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

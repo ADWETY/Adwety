@@ -3,29 +3,20 @@
 This backend includes a complete Admin/Dashboard REST API. It is not Firebase.
 It is Node.js + Express + MongoDB and uses JWT admin authentication.
 
-## Base URLs
-
-All dashboard routes are available from the same controller through these aliases:
+## Canonical base URL
 
 ```text
-/api/admin
-/api/dashboard
 /api/v1/admin
-/api/v1/dashboard
 ```
 
-Use any one base path in the dashboard frontend. Recommended:
-
-```text
-/api/admin
-```
+Historical dashboard aliases are disabled by default and must not be used by new clients.
 
 ## Authentication
 
 ### Login
 
 ```text
-POST /api/admin/auth/login
+POST /api/v1/auth/login
 ```
 
 Body:
@@ -33,45 +24,40 @@ Body:
 ```json
 {
   "email": "admin@adwety.app",
-  "password": "Password123"
+  "password": "StrongPassword123!"
 }
 ```
 
-Response:
+The browser receives `HttpOnly` access and rotating refresh cookies. The JSON response contains user metadata only; it does not expose tokens to JavaScript.
 
-```json
-{
-  "success": true,
-  "message": "Dashboard login successful",
-  "data": {
-    "user": {},
-    "token": "jwt-token"
-  }
-}
+All dashboard requests must use:
+
+```js
+fetch(url, { credentials: "include" })
 ```
 
-Send the token on all dashboard requests:
+For `POST`, `PUT`, `PATCH`, and `DELETE`, read the `adwety_csrf` cookie and send the same value in:
 
-```text
-Authorization: Bearer <token>
+```http
+X-CSRF-Token: <csrf-cookie-value>
 ```
 
 ### Current admin
 
 ```text
-GET /api/admin/auth/me
-GET /api/admin/me
+GET /api/v1/auth/me
+GET /api/v1/admin/auth/me
 ```
 
 ## Users CRUD
 
 ```text
-GET    /api/admin/users?q=&role=&isActive=&page=&limit=
-POST   /api/admin/users
-GET    /api/admin/users/:id
-PATCH  /api/admin/users/:id
-PUT    /api/admin/users/:id
-DELETE /api/admin/users/:id
+GET    /api/v1/admin/users?q=&role=&isActive=&page=&limit=
+POST   /api/v1/admin/users
+GET    /api/v1/admin/users/:id
+PATCH  /api/v1/admin/users/:id
+PUT    /api/v1/admin/users/:id
+DELETE /api/v1/admin/users/:id
 ```
 
 Create body:
@@ -80,7 +66,7 @@ Create body:
 {
   "name": "Dashboard User",
   "email": "user@example.com",
-  "password": "Password123",
+  "password": "StrongPassword123!",
   "role": "patient",
   "phone_number": "01000000000",
   "is_active": true
@@ -90,12 +76,12 @@ Create body:
 ## Pharmacies CRUD
 
 ```text
-GET    /api/admin/pharmacies?q=&status=&ownerId=&page=&limit=
-POST   /api/admin/pharmacies
-GET    /api/admin/pharmacies/:id
-PATCH  /api/admin/pharmacies/:id
-PUT    /api/admin/pharmacies/:id
-DELETE /api/admin/pharmacies/:id
+GET    /api/v1/admin/pharmacies?q=&status=&ownerId=&page=&limit=
+POST   /api/v1/admin/pharmacies
+GET    /api/v1/admin/pharmacies/:id
+PATCH  /api/v1/admin/pharmacies/:id
+PUT    /api/v1/admin/pharmacies/:id
+DELETE /api/v1/admin/pharmacies/:id
 ```
 
 Create body:
@@ -117,12 +103,12 @@ Create body:
 ## Drugs CRUD
 
 ```text
-GET    /api/admin/drugs?q=&category=&isActive=&page=&limit=
-POST   /api/admin/drugs
-GET    /api/admin/drugs/:id
-PATCH  /api/admin/drugs/:id
-PUT    /api/admin/drugs/:id
-DELETE /api/admin/drugs/:id
+GET    /api/v1/admin/drugs?q=&category=&isActive=&page=&limit=
+POST   /api/v1/admin/drugs
+GET    /api/v1/admin/drugs/:id
+PATCH  /api/v1/admin/drugs/:id
+PUT    /api/v1/admin/drugs/:id
+DELETE /api/v1/admin/drugs/:id
 ```
 
 Create body:
@@ -142,24 +128,24 @@ Create body:
 ## Categories CRUD
 
 ```text
-GET    /api/admin/categories?q=&page=&limit=
-POST   /api/admin/categories
-GET    /api/admin/categories/:id
-PATCH  /api/admin/categories/:id
-PUT    /api/admin/categories/:id
-DELETE /api/admin/categories/:id
+GET    /api/v1/admin/categories?q=&page=&limit=
+POST   /api/v1/admin/categories
+GET    /api/v1/admin/categories/:id
+PATCH  /api/v1/admin/categories/:id
+PUT    /api/v1/admin/categories/:id
+DELETE /api/v1/admin/categories/:id
 ```
 
 ## Inventory CRUD and sync
 
 ```text
-GET    /api/admin/inventory?q=&pharmacyId=&drugId=&lowStock=&page=&limit=
-POST   /api/admin/inventory
-POST   /api/admin/inventory/sync
-GET    /api/admin/inventory/:id
-PATCH  /api/admin/inventory/:id
-PUT    /api/admin/inventory/:id
-DELETE /api/admin/inventory/:id
+GET    /api/v1/admin/inventory?q=&pharmacyId=&drugId=&lowStock=&page=&limit=
+POST   /api/v1/admin/inventory
+POST   /api/v1/admin/inventory/sync
+GET    /api/v1/admin/inventory/:id
+PATCH  /api/v1/admin/inventory/:id
+PUT    /api/v1/admin/inventory/:id
+DELETE /api/v1/admin/inventory/:id
 ```
 
 Single item body:
@@ -187,19 +173,19 @@ Bulk sync body:
 ## Logs
 
 ```text
-GET    /api/admin/logs?source=system&type=sync&q=&page=&limit=
-GET    /api/admin/logs?source=ai&status=completed&q=&page=&limit=
-GET    /api/admin/ai-logs?page=&limit=
-GET    /api/admin/system-logs?page=&limit=
-GET    /api/admin/logs/:id?source=system
-DELETE /api/admin/logs/:id?source=system
+GET    /api/v1/admin/logs?source=system&type=sync&q=&page=&limit=
+GET    /api/v1/admin/logs?source=ai&status=completed&q=&page=&limit=
+GET    /api/v1/admin/ai-logs?page=&limit=
+GET    /api/v1/admin/system-logs?page=&limit=
+GET    /api/v1/admin/logs/:id?source=system
+DELETE /api/v1/admin/logs/:id?source=system
 ```
 
 ## Analytics and settings
 
 ```text
-GET /api/admin/analytics
-GET /api/admin/settings
+GET /api/v1/admin/analytics
+GET /api/v1/admin/settings
 ```
 
 Analytics returns totals for users, admins, pharmacists, patients, pharmacies, active pharmacies, drugs, categories, inventory items, low stock items, AI logs, failed AI logs, sync logs, login attempts, and recent logs.

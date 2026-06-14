@@ -2,16 +2,33 @@ const router = require('express').Router();
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validation');
 const controller = require('../controllers/admin.controller');
+const authController = require('../controllers/auth.controller');
+const { loginLimiter, mfaLimiter, refreshLimiter } = require('../middleware/auth-rate-limiters');
+const noStore = (_req,res,next)=>{res.setHeader('Cache-Control','no-store');res.setHeader('Pragma','no-cache');next();};
+router.use('/auth', noStore);
 
 // Dashboard/Admin authentication. The dashboard uses normal JWT tokens.
-router.post('/auth/login', validate(controller.loginSchema), controller.dashboardLogin);
+router.post('/auth/login', loginLimiter, validate(controller.loginSchema), controller.dashboardLogin);
+router.post('/auth/mfa/verify', mfaLimiter, validate(authController.mfaVerifySchema), authController.verifyMfaAuto);
+router.post('/auth/mfa/setup/verify', mfaLimiter, validate(authController.mfaVerifySchema), authController.verifyMfaSetup);
+router.post('/auth/refresh', refreshLimiter, validate(authController.refreshSchema), authController.refresh);
+router.post('/auth/logout', auth.optionalLenient, validate(authController.logoutSchema), authController.logout);
+router.post('/auth/logout-all', auth, auth.authorize(['admin']), authController.logoutAll);
+router.post('/auth/mfa/reauth', auth, auth.authorize(['admin']), mfaLimiter, validate(authController.mfaReauthSchema), authController.reauthMfa);
 router.get('/auth/me', auth, auth.authorize(['admin']), controller.dashboardMe);
 router.get('/me', auth, auth.authorize(['admin']), controller.dashboardMe);
 
 router.use(auth, auth.authorize(['admin']));
+router.use(auth.requireRecentMfaForWrites);
+
+
+// Retail/MATGR business modules. Mounted on both /admin/<module> and /admin/retail/<module>.
+const retailRoutes = require('./retail.routes');
+router.use('/retail', retailRoutes);
+router.use('/', retailRoutes);
 
 // Dashboard overview and settings.
-router.get('/analytics', controller.analytics);
+router.get('/analytics', validate(controller.analyticsSchema), controller.analytics);
 router.get('/settings', controller.settings);
 
 // Users CRUD.
@@ -23,6 +40,9 @@ router.put('/users/:id', validate(controller.updateUserSchema), controller.updat
 router.delete('/users/:id', validate(controller.byIdSchema), controller.deleteUser);
 
 // Pharmacies CRUD.
+router.get('/pharmacy-requests', validate(controller.pharmacyRequestListSchema), controller.pharmacyRequests);
+router.patch('/pharmacy-requests/:id/approve', validate(controller.byIdSchema), controller.approvePharmacyRequest);
+router.patch('/pharmacy-requests/:id/reject', validate(controller.byIdSchema), controller.rejectPharmacyRequest);
 router.get('/pharmacies', validate(controller.pharmacyListSchema), controller.pharmacies);
 router.post('/pharmacies', validate(controller.createPharmacySchema), controller.createPharmacy);
 router.get('/pharmacies/:id', validate(controller.byIdSchema), controller.getPharmacy);
@@ -59,7 +79,8 @@ router.delete('/inventory/:id', validate(controller.byIdSchema), controller.dele
 router.get('/logs', validate(controller.logListSchema), controller.logs);
 router.get('/logs/:id', validate(controller.logByIdSchema), controller.getLog);
 router.delete('/logs/:id', validate(controller.logByIdSchema), controller.deleteLog);
-router.get('/ai-logs', validate(controller.logListSchema), controller.aiLogs);
+router.get('/ai-logs', auth.requireRecentMfa, validate(controller.logListSchema), controller.aiLogs);
+router.get('/ai-logs/:id/sensitive', auth.requireRecentMfa, validate(controller.aiSensitiveLogSchema), controller.getSensitiveAiLog);
 router.get('/system-logs', validate(controller.logListSchema), controller.systemLogs);
 
 module.exports = router;

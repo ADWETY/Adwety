@@ -1,73 +1,19 @@
-# Legacy Dashboard Endpoints
+# Retired dashboard compatibility endpoints
 
-This backend keeps the original dashboard frontend paths unchanged. The Flutter endpoints and the new admin/dashboard endpoints were added as extra layers only.
+The original dashboard compatibility router is disabled by default and is not part of the production API surface.
 
-## Original dashboard base URL
+Canonical replacement:
 
-```txt
-/api/v1
+```text
+/api/v1/admin
 ```
 
-## Legacy paths that still work
+Temporary migration-only activation:
 
-```txt
-POST   /api/v1/auth/register
-POST   /api/v1/auth/register/verify-otp
-POST   /api/v1/auth/login
-POST   /api/v1/auth/login/verify-otp
-POST   /api/v1/auth/forgot-password
-POST   /api/v1/auth/reset-password
-POST   /api/v1/auth/logout
-
-GET    /api/v1/profile
-GET    /api/v1/profile/me
-PATCH  /api/v1/profile
-POST   /api/v1/profile/email/request-otp
-POST   /api/v1/profile/email/confirm-otp
-
-GET    /api/v1/medicines
-GET    /api/v1/medicines/search
-POST   /api/v1/medicines
-GET    /api/v1/medicines/:id
-PUT    /api/v1/medicines/:id
-PATCH  /api/v1/medicines/:id
-DELETE /api/v1/medicines/:id
-
-GET    /api/v1/pharmacies
-POST   /api/v1/pharmacies
-GET    /api/v1/pharmacies/:id
-PUT    /api/v1/pharmacies/:id
-PATCH  /api/v1/pharmacies/:id
-DELETE /api/v1/pharmacies/:id
-
-GET    /api/v1/inventory
-POST   /api/v1/inventory/sync
-
-POST   /api/v1/prescriptions/scan
-POST   /api/v1/prescriptions/scan-auth
-
-GET    /api/v1/notifications
-
-GET    /api/v1/admins
-POST   /api/v1/admins
-PATCH  /api/v1/admins/:id
-PUT    /api/v1/admins/:id
-DELETE /api/v1/admins/:id
-
-GET    /api/v1/approval-requests
-PATCH  /api/v1/approval-requests/:id/approve
-PATCH  /api/v1/approval-requests/:id/reject
-
-GET    /api/v1/analytics
+```env
+ENABLE_LEGACY_DASHBOARD_ROUTES=true
 ```
 
-## New paths are also still available
+When enabled, compatibility responses carry `Deprecation`, `Sunset`, `Link`, and `Warning` headers and use the same centralized authentication, authorization, MFA, validation, tenant-boundary, and Redis rate-limit middleware. Disable the flag immediately after the dashboard is migrated.
 
-```txt
-/v1/...              Flutter mobile endpoints
-/api/admin/...      Admin backend endpoints
-/api/dashboard/...  Dashboard aliases
-/api/...            Main backend endpoints
-```
-
-Do not change the dashboard frontend base URL or paths. Keep using the same `/api/v1/...` URLs.
+Do not implement new features in `legacy-dashboard.controller.js`. New features belong in the canonical modular controllers under `/api/v1` or `/api/v1/admin`.

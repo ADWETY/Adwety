@@ -39,7 +39,7 @@ function asNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function userDto(user, token = null) {
+function userDto(user, tokens = null) {
   return {
     id: idOf(user),
     name: user.fullName || user.name || '',
@@ -47,7 +47,15 @@ function userDto(user, token = null) {
     role: user.role || 'patient',
     phone_number: user.phoneNumber || '',
     pharmacy_id: user.pharmacyId ? idOf(user.pharmacyId) : null,
-    token
+    token: tokens?.token || tokens?.access_token || tokens || null,
+    access_token: tokens?.access_token || tokens?.token || null,
+    refresh_token: tokens?.refresh_token || null,
+    expires_in: tokens?.expires_in || null,
+    password_policy_version: Number(user.passwordPolicyVersion || 1),
+    password_upgrade_recommended: Number(user.passwordPolicyVersion || 1) < 2,
+    mfa_enabled: user.mfaEnabled === true,
+    mfa_policy_version: Number(user.mfaPolicyVersion || 1),
+    mfa_grandfathered: user.role === 'admin' && Number(user.mfaPolicyVersion || 1) < 2 && user.mfaEnabled !== true
   };
 }
 

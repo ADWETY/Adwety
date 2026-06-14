@@ -5,3 +5,5 @@ private_uploads/*
 !private_uploads/.gitkeep
 npm-debug.log*
 .DS_Store
+secrets/*.txt
+!secrets/README.md

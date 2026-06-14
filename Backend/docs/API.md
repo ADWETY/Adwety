@@ -1,50 +1,57 @@
-# API Details
+# Core API details
 
-All endpoints are mounted at `/api` and `/api/v1`.
+Canonical base URL:
 
-## Auth
-
-`POST /api/auth/register`
-
-```json
-{ "fullName": "Omar", "email": "omar@example.com", "password": "Password123", "role": "patient" }
+```text
+/api/v1
 ```
 
-`POST /api/auth/login`
+## Authentication
 
-```json
-{ "email": "omar@example.com", "password": "Password123" }
-```
+Browser dashboard sessions use server-issued cookies:
 
-Use returned token as:
+- `adwety_access`: `HttpOnly`, short-lived access token.
+- `adwety_refresh`: `HttpOnly`, rotating refresh token.
+- `adwety_csrf`: readable signed CSRF token. Send it as `X-CSRF-Token` on `POST`, `PUT`, `PATCH`, and `DELETE` requests.
+
+Browser clients must use `credentials: "include"`. Access and refresh tokens are not returned to dashboard JavaScript.
+
+Official mobile endpoints under `/api/v1/mobile` continue to use:
 
 ```http
-Authorization: Bearer <token>
+Authorization: Bearer <access_token>
 ```
 
-## Inventory sync
+Access tokens are short-lived and mobile refresh tokens rotate on every refresh.
 
-`POST /api/inventory/sync`
+## Pharmacist inventory
 
-```json
-{
-  "pharmacyId": "<pharmacy_id>",
-  "inventory": [
-    { "drugId": "<drug_id>", "quantity": 10, "price": 35.5 }
-  ]
-}
+```text
+GET  /api/v1/pharmacy/my-inventory
+POST /api/v1/inventory/sync
 ```
 
-The backend stores snapshots only and does not perform sales or POS transactions.
+For a pharmacist, pharmacy scope is derived from the authenticated account. A pharmacist cannot select another `pharmacyId`. Administrators may use the explicit multi-pharmacy administration workflow.
 
-## Main search
+## Search
 
-`GET /api/search?drug=panadol&lat=30.0444&lng=31.2357&radius_km=20`
+```text
+GET /api/v1/search?drug=panadol&lat=30.0444&lng=31.2357&radius_km=20
+```
 
-Returns pharmacy name, distance, available quantity, last updated time, and matched drug.
+## AI prescription scan
 
-## AI prescription
+```text
+POST /api/v1/ai/prescription
+POST /api/v1/prescriptions/scan
+```
 
-`POST /api/ai/prescription` as multipart with field `image` or `prescription`, or JSON/text with `text`/`mock_text` in development.
+Authentication is mandatory. Requests are quota-limited and accept inspected image/PDF uploads or validated text input. AI-derived strings must still be rendered as text, never injected as HTML by clients.
 
-Optional `lat` and `lng` return nearby pharmacies for extracted drugs.
+## Administration
+
+```text
+/api/v1/admin
+```
+
+Administrator operations require an administrator session; sensitive operations additionally require recent MFA.

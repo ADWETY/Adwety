@@ -1,9 +1,7 @@
-const bcrypt = require('bcryptjs');
 const connectDatabase = require('../config/database');
-const env = require('../config/env');
-const { User, Pharmacy, Drug, InventorySnapshot, Category } = require('../models');
+const { User, Pharmacy, Drug, InventorySnapshot, Category, StoreCategory, StoreWarehouse, StoreProduct, StorePerson, StoreInvoice, StoreTreasuryMovement } = require('../models');
 
-const password = 'Password123';
+const password = 'AdwetyDemo#2026';
 
 const demoDrugs = [
   { genericName: 'Panadol Extra', brandNames: ['Panadol'], aliases: ['Paracetamol Extra', 'بنادول'], category: 'Pain relief', dosageForm: 'Tablet', strength: '500mg', description: 'Pain reliever and fever reducer.' },
@@ -32,10 +30,77 @@ const inventory = [
 ];
 
 async function upsertUser({ fullName, email, role }) {
-  const passwordHash = await bcrypt.hash(password, env.bcryptSaltRounds);
+  const { hashPassword } = require('../services/password.service');
+  const passwordHash = await hashPassword(password, { email, fullName });
   return User.findOneAndUpdate(
     { email },
-    { $set: { fullName, role, passwordHash, isActive: true } },
+    {
+      $set: { fullName, role, passwordHash, passwordPolicyVersion: 2, isActive: true },
+      $setOnInsert: { mfaPolicyVersion: role === 'admin' ? 2 : 1 }
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+}
+
+
+
+async function seedRetailDemo(admin) {
+  const categories = [
+    { name: 'Beverages', description: 'Drinks and juices', status: 'active' },
+    { name: 'Groceries', description: 'Basic grocery items', status: 'active' },
+    { name: 'Cleaning', description: 'Household cleaning products', status: 'active' }
+  ];
+  const warehouses = [
+    { name: 'Main Warehouse', code: 'MAIN', address: 'Head office storage', manager: 'Warehouse Manager', phone: '+20 100 000 1111', status: 'active' },
+    { name: 'Branch Store', code: 'BR-01', address: 'Retail branch stock room', manager: 'Branch Manager', phone: '+20 100 000 2222', status: 'active' }
+  ];
+  const customers = [
+    { type: 'customer', name: 'Cash Customer', phone: '', email: '', address: '', openingBalance: 0, balanceType: 'debit', status: 'active' },
+    { type: 'customer', name: 'Ahmed Market', phone: '+20 101 123 4567', email: 'ahmed.market@example.com', address: 'Cairo', openingBalance: 2500, balanceType: 'debit', status: 'active' }
+  ];
+  const suppliers = [
+    { type: 'supplier', name: 'Delta Supplies', phone: '+20 100 111 7777', email: 'delta@example.com', address: 'Menoufia', openingBalance: 5400, balanceType: 'credit', status: 'active' },
+    { type: 'supplier', name: 'Cairo Wholesale', phone: '+20 111 222 8888', email: 'wholesale@example.com', address: 'Cairo', openingBalance: 1200, balanceType: 'debit', status: 'active' }
+  ];
+
+  for (const category of categories) await StoreCategory.findOneAndUpdate({ name: category.name }, { $set: category }, { new: true, upsert: true });
+  for (const warehouse of warehouses) await StoreWarehouse.findOneAndUpdate({ code: warehouse.code }, { $set: warehouse }, { new: true, upsert: true });
+  for (const person of [...customers, ...suppliers]) await StorePerson.findOneAndUpdate({ type: person.type, name: person.name }, { $set: person }, { new: true, upsert: true });
+
+  const cats = await StoreCategory.find();
+  const whs = await StoreWarehouse.find();
+  const people = await StorePerson.find();
+  const categoryByName = new Map(cats.map((c) => [c.name, c]));
+  const warehouseByCode = new Map(whs.map((w) => [w.code, w]));
+  const personByName = new Map(people.map((p) => [p.name, p]));
+  const main = warehouseByCode.get('MAIN');
+  const branch = warehouseByCode.get('BR-01');
+
+  const products = [
+    { code: 'P-1001', barcode: '6221001001', name: 'Mineral Water 1.5L', categoryId: categoryByName.get('Beverages')?._id, unit: 'Bottle', unitFactor: 1, purchasePrice: 6, salePrice: 10, minStock: 25, stock: { [main._id]: 180, [branch._id]: 65 }, units: [{ name: 'Bottle', factor: 1, salePrice: 10 }, { name: 'Pack 12', factor: 12, salePrice: 115 }], status: 'active' },
+    { code: 'P-1002', barcode: '6221001002', name: 'Orange Juice 1L', categoryId: categoryByName.get('Beverages')?._id, unit: 'Carton', unitFactor: 1, purchasePrice: 22, salePrice: 35, minStock: 20, stock: { [main._id]: 90, [branch._id]: 22 }, units: [{ name: 'Carton', factor: 1, salePrice: 35 }, { name: 'Box 6', factor: 6, salePrice: 200 }], status: 'active' },
+    { code: 'P-2001', barcode: '6222001001', name: 'Rice 5kg', categoryId: categoryByName.get('Groceries')?._id, unit: 'Bag', unitFactor: 1, purchasePrice: 175, salePrice: 215, minStock: 15, stock: { [main._id]: 42, [branch._id]: 12 }, units: [{ name: 'Bag', factor: 1, salePrice: 215 }], status: 'active' },
+    { code: 'P-3001', barcode: '6223001001', name: 'Dish Soap 750ml', categoryId: categoryByName.get('Cleaning')?._id, unit: 'Piece', unitFactor: 1, purchasePrice: 34, salePrice: 52, minStock: 18, stock: { [main._id]: 44, [branch._id]: 9 }, units: [{ name: 'Piece', factor: 1, salePrice: 52 }], status: 'active' }
+  ];
+  for (const product of products) await StoreProduct.findOneAndUpdate({ code: product.code }, { $set: product }, { new: true, upsert: true, setDefaultsOnInsert: true });
+
+  const productByCode = new Map((await StoreProduct.find()).map((p) => [p.code, p]));
+  const saleNumber = 'SAL-0001';
+  const saleItems = [
+    { productId: productByCode.get('P-1001')._id, name: 'Mineral Water 1.5L', code: 'P-1001', barcode: '6221001001', unit: 'Bottle', unitFactor: 1, qty: 20, price: 10, purchasePrice: 6, discount: 0 },
+    { productId: productByCode.get('P-2001')._id, name: 'Rice 5kg', code: 'P-2001', barcode: '6222001001', unit: 'Bag', unitFactor: 1, qty: 3, price: 215, purchasePrice: 175, discount: 0 }
+  ];
+  const saleSubtotal = saleItems.reduce((sum, item) => sum + item.qty * item.price - item.discount, 0);
+  const saleTotal = saleSubtotal - 40;
+  const salePaid = 900;
+  await StoreInvoice.findOneAndUpdate(
+    { number: saleNumber },
+    { $set: { kind: 'sale', number: saleNumber, date: new Date(), warehouseId: branch._id, customerId: personByName.get('Ahmed Market')?._id, paymentMethod: 'cash', discount: 40, paid: salePaid, notes: 'Initial demo invoice', items: saleItems, subtotal: saleSubtotal, total: saleTotal, due: Math.max(0, saleTotal - salePaid), profit: saleItems.reduce((sum, item) => sum + (item.qty * item.price - item.discount) - item.qty * item.purchasePrice, 0) - 40, status: 'active', createdBy: admin?._id } },
+    { new: true, upsert: true }
+  );
+  await StoreTreasuryMovement.findOneAndUpdate(
+    { sourceType: 'opening', category: 'Opening Balance' },
+    { $set: { date: new Date(), type: 'income', category: 'Opening Balance', amount: 15000, description: 'Demo opening balance', warehouseId: main._id, sourceType: 'opening', createdBy: admin?._id } },
     { new: true, upsert: true }
   );
 }
@@ -43,7 +108,7 @@ async function upsertUser({ fullName, email, role }) {
 async function main() {
   await connectDatabase();
 
-  await upsertUser({ fullName: 'Admin User', email: 'admin@adwety.app', role: 'admin' });
+  const admin = await upsertUser({ fullName: 'Admin User', email: 'admin@adwety.app', role: 'admin' });
   const pharmacist = await upsertUser({ fullName: 'Demo Pharmacist', email: 'pharmacist@adwety.app', role: 'pharmacist' });
   await upsertUser({ fullName: 'Mona Ahmed', email: 'mona@adwety.app', role: 'patient' });
 
@@ -80,10 +145,12 @@ async function main() {
     );
   }
 
+  await seedRetailDemo(admin);
+
   console.log('Demo data seeded successfully.');
-  console.log('Patient login: mona@adwety.app / Password123');
-  console.log('Pharmacist login: pharmacist@adwety.app / Password123');
-  console.log('Admin login: admin@adwety.app / Password123');
+  console.log('Patient login: mona@adwety.app / AdwetyDemo#2026');
+  console.log('Pharmacist login: pharmacist@adwety.app / AdwetyDemo#2026');
+  console.log('Admin login: admin@adwety.app / AdwetyDemo#2026');
   await mongooseDisconnect();
 }
 

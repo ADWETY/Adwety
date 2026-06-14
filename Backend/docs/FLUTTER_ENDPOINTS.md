@@ -1,22 +1,22 @@
 # Flutter Mobile Endpoints
 
-These endpoints were added specifically for the uploaded Flutter app. They are mounted at `/v1` and return raw JSON matching the Dart model fields instead of the standard backend response wrapper.
+These endpoints were added specifically for the uploaded Flutter app. They are mounted canonically at `/api/api/v1/mobile/mobile` and return raw JSON matching the Dart model fields instead of the standard backend response wrapper.
 
 Recommended Flutter base URL for local Android emulator:
 
 ```dart
-static const String baseUrl = 'http://10.0.2.2:6500/v1';
+static const String baseUrl = 'http://10.0.2.2:6500/api/api/v1/mobile/mobile';
 ```
 
 Recommended Flutter base URL for iOS simulator / desktop:
 
 ```dart
-static const String baseUrl = 'http://127.0.0.1:6500/v1';
+static const String baseUrl = 'http://127.0.0.1:6500/api/api/v1/mobile/mobile';
 ```
 
 ## Auth
 
-### POST `/v1/login`
+### POST `/api/v1/mobile/login`
 
 Request:
 
@@ -32,11 +32,11 @@ Response matches `UserModel`:
 
 Aliases:
 
-- `POST /v1/auth/login`
-- `POST /v1/register`
-- `POST /v1/auth/register`
+- `POST /api/v1/mobile/auth/login`
+- `POST /api/v1/mobile/register`
+- `POST /api/v1/mobile/auth/register`
 
-### GET `/v1/profile`
+### GET `/api/v1/mobile/profile`
 
 Requires:
 
@@ -48,7 +48,7 @@ Returns the same shape as `UserModel`.
 
 ## Pharmacies
 
-### GET `/v1/pharmacies`
+### GET `/api/v1/mobile/pharmacies`
 
 Response matches the Flutter `PharmacyModel` list:
 
@@ -68,7 +68,7 @@ Response matches the Flutter `PharmacyModel` list:
 
 Optional query params: `q`, `lat`, `lng`, `radius_km`, `limit`.
 
-### GET `/v1/pharmacies/:id`
+### GET `/api/v1/mobile/pharmacies/:id`
 
 Returns:
 
@@ -87,7 +87,7 @@ Returns:
 
 ## Medicines
 
-### GET `/v1/medicines?q=panadol`
+### GET `/api/v1/mobile/medicines?q=panadol`
 
 Response matches the Flutter home `MedicineModel` list:
 
@@ -105,7 +105,7 @@ Response matches the Flutter home `MedicineModel` list:
 ]
 ```
 
-### GET `/v1/medicines/:id`
+### GET `/api/v1/mobile/medicines/:id`
 
 Response matches `DrugModel`:
 
@@ -115,7 +115,7 @@ Response matches `DrugModel`:
 
 ## Search
 
-### GET `/v1/search?query=panadol&lat=30.0444&lng=31.2357`
+### GET `/api/v1/mobile/search?query=panadol&lat=30.0444&lng=31.2357`
 
 Response matches a list of Flutter `DrugSearchResult` objects:
 
@@ -131,13 +131,13 @@ Response matches a list of Flutter `DrugSearchResult` objects:
 
 Aliases:
 
-- `GET /v1/search/drugs?q=panadol`
-- `GET /v1/drugs/search?q=panadol`
-- `GET /v1/drugs?q=panadol`
+- `GET /api/v1/mobile/search/drugs?q=panadol`
+- `GET /api/v1/mobile/drugs/search?q=panadol`
+- `GET /api/v1/mobile/drugs?q=panadol`
 
 ## Prescription Scan
 
-### POST `/v1/scan/prescription`
+### POST `/api/v1/mobile/scan/prescription`
 
 Accepts multipart image/PDF or JSON body `{ "text": "..." }`.
 
@@ -151,7 +151,7 @@ Response matches a list of `DrugModel` objects:
 
 Alias:
 
-- `POST /v1/ai/prescription`
+- `POST /api/v1/mobile/ai/prescription`
 
 ## Demo data
 
