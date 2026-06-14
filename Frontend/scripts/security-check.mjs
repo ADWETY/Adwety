@@ -12,6 +12,17 @@ const boundary = read('src/components/ErrorBoundary.jsx');
 const headers = read('public/_headers');
 const nginx = read('deploy/nginx.conf');
 
+const app = read('src/App.jsx');
+const roles = read('src/lib/roles.js');
+const sidebar = read('src/components/Sidebar.jsx');
+assert.doesNotMatch(app, /PrescriptionScannerPage|RegisterPage/);
+assert.match(app, /path="\/register"[\s\S]*Navigate to="\/login"/);
+assert.match(app, /path="scanner"[\s\S]*Navigate to="\/"/);
+assert.match(roles, /web:\s*\['admin',\s*'pharmacist'\]/);
+assert.match(roles, /retail:\s*\['admin',\s*'pharmacist'\]/);
+assert.doesNotMatch(sidebar, /nav\.scanner|to:\s*['"]\/scanner/);
+assert.match(api, /`\/retail\$\{pathname\}/);
+
 assert.doesNotMatch(storage, /localStorage\.setItem\([^\n]*(?:token|Token)/);
 assert.doesNotMatch(storage, /export function (?:set|get)StoredToken/);
 assert.match(storage, /purgeLegacyTokenStorage/);
@@ -32,4 +43,4 @@ assert.equal(utils.safeCsvCell('  +SUM(A1:A2)').startsWith("'"), true);
 assert.equal(utils.safeCsvCell('\t@cmd').startsWith("'"), true);
 assert.equal(utils.safeCsvCell(-42), '-42');
 
-console.log('Frontend security checks passed: cookie sessions, CSRF, silent refresh, CSV hardening, and CSP deployment headers.');
+console.log('Frontend security checks passed: staff-only web roles, no web prescription upload, tenant retail routing, cookie sessions, CSRF, silent refresh, CSV hardening, and CSP headers.');

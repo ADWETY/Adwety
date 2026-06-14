@@ -76,7 +76,6 @@ export default function SettingsPage() {
         <div className="mt-5 space-y-3">
           {[
             [t('common.apiUrl'), env.apiBaseUrl],
-            [t('common.uploadLimit'), `${env.maxUploadSizeMb} MB`],
             [t('app.appVersion'), env.appVersion],
           ].map(([label, value]) => (
             <div className="flex justify-between gap-4 border-b border-soft pb-3" key={label}>

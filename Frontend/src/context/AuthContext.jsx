@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { normalizeRole } from '../lib/roles';
+import { isWebStaffRole, normalizeRole } from '../lib/roles';
 import { getJson, postJson } from '../lib/api';
 import {
   clearAuthStorage,
@@ -101,12 +101,22 @@ export function AuthProvider({ children }) {
           role: profile.role,
         });
 
+        if (!isWebStaffRole(nextSession.role)) {
+          try { await postJson('/auth/logout', {}); } catch (_error) {}
+          setSession(null);
+          clearAuthStorage();
+          clearStoredSession();
+          return;
+        }
+
         setSession(nextSession);
         persistAuthenticatedSession();
       } catch (_error) {
+        try { await postJson('/auth/logout', {}); } catch (_logoutError) {}
         if (!cancelled) {
           setSession(null);
           clearAuthStorage();
+          clearStoredSession();
         }
       } finally {
         if (!cancelled) setIsBooting(false);
@@ -130,6 +140,12 @@ export function AuthProvider({ children }) {
       }
 
       const nextSession = buildSession(payload, { email });
+      if (!isWebStaffRole(nextSession.role)) {
+        try { await postJson('/auth/logout', {}); } catch (_error) {}
+        clearAuthStorage();
+        clearStoredSession();
+        throw new Error('Web dashboard access is limited to administrators and pharmacists.');
+      }
       setSession(nextSession);
       persistAuthenticatedSession();
       return nextSession;
@@ -138,31 +154,12 @@ export function AuthProvider({ children }) {
       const result = await postJson('/auth/login/verify-otp', { otp_token: otpToken, otp });
       const payload = normalizeAuthPayload(result);
       const nextSession = buildSession(payload, { email, role });
-      setSession(nextSession);
-      persistAuthenticatedSession();
-      return nextSession;
-    },
-    async register({ fullName, email, password, phoneNumber }) {
-      const result = await postJson('/auth/register', {
-        full_name: fullName,
-        fullName,
-        name: fullName,
-        email,
-        password,
-        phone_number: phoneNumber,
-        phoneNumber,
-      });
-      const payload = normalizeAuthPayload(result);
-      if (payload.requires_otp || payload.queued) return { ...payload, email, role: 'patient' };
-      const nextSession = buildSession(payload, { email, role: 'patient' });
-      setSession(nextSession);
-      persistAuthenticatedSession();
-      return nextSession;
-    },
-    async verifyRegisterOtp({ otpToken, otp, email }) {
-      const result = await postJson('/auth/register/verify-otp', { otp_token: otpToken, otp });
-      const payload = normalizeAuthPayload(result);
-      const nextSession = buildSession(payload, { email, role: 'patient' });
+      if (!isWebStaffRole(nextSession.role)) {
+        try { await postJson('/auth/logout', {}); } catch (_error) {}
+        clearAuthStorage();
+        clearStoredSession();
+        throw new Error('Web dashboard access is limited to administrators and pharmacists.');
+      }
       setSession(nextSession);
       persistAuthenticatedSession();
       return nextSession;

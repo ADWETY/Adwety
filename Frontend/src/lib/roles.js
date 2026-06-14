@@ -1,12 +1,13 @@
 export const ROLE_GROUPS = {
+  web: ['admin', 'pharmacist'],
   super: ['admin'],
   admin: ['admin'],
   support: ['admin'],
-  scanner: ['admin', 'pharmacist', 'patient'],
+  retail: ['admin', 'pharmacist'],
   dashboard: ['admin'],
   medicine: ['admin'],
-  notifications: ['admin', 'pharmacist', 'patient'],
-  settings: ['admin', 'pharmacist', 'patient'],
+  notifications: ['admin', 'pharmacist'],
+  settings: ['admin', 'pharmacist'],
 };
 
 export function normalizeRole(role) {
@@ -22,4 +23,8 @@ export function hasRole(role, allowedRoles = []) {
   if (!allowedRoles?.length) return true;
   const normalized = normalizeRole(role);
   return allowedRoles.map(normalizeRole).includes(normalized);
+}
+
+export function isWebStaffRole(role) {
+  return hasRole(role, ROLE_GROUPS.web);
 }

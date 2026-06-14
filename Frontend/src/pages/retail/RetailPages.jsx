@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Children, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeftRight,
@@ -7,6 +7,7 @@ import {
   Boxes,
   Barcode,
   ClipboardCheck,
+  ChevronDown,
   Download,
   Eye,
   FileText,
@@ -151,8 +152,25 @@ function TextInput({ label, value, onChange, type = 'text', placeholder = '', mi
   return <div><label className="label">{label}</label><input ref={inputRef} className="input" type={type} inputMode={inputMode} value={value ?? ''} min={min} step={step} placeholder={placeholder} onKeyDown={onKeyDown} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)} /></div>;
 }
 
-function SelectInput({ label, value, onChange, children, disabled = false, placeholder = '' }) {
-  return <div><label className="label">{label}</label><select className="input" value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value)}>{placeholder ? <option value="" disabled>{placeholder}</option> : null}{children}</select></div>;
+function SelectInput({ label, value, onChange, children, disabled = false, placeholder = '', emptyText = '', className = '' }) {
+  const optionCount = Children.count(children);
+  const safeValue = optionCount ? (value ?? '') : '';
+  return <div className={className}>
+    {label ? <label className="label">{label}</label> : null}
+    <div className="relative">
+      <select
+        className="input select-control"
+        value={safeValue}
+        disabled={disabled}
+        aria-disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {placeholder ? <option value="">{placeholder}</option> : null}
+        {!optionCount ? <option value="" disabled>{emptyText || placeholder || 'No options available'}</option> : children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute end-4 top-1/2 h-4 w-4 -translate-y-1/2 text-soft" />
+    </div>
+  </div>;
 }
 
 function Toolbar({ query, onQuery, onPrint, onExport, children }) {
@@ -407,7 +425,7 @@ const directoryConfig = {
 function DirectoryPage({ kind }) {
   const cfg = directoryConfig[kind];
   const { data, setData } = useRetailStore();
-  const { L, language } = useRetailCopy();
+  const { L, language, B } = useRetailCopy();
   const toast = useToast();
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(cfg.empty);
@@ -868,7 +886,7 @@ function InvoiceItemEditor({ data, warehouseId, items, setItems, mode = 'sale' }
 }
 
 export function PosPage() {
-  const { data, setData } = useRetailStore();
+  const { data, setData, isSaving, requiresPharmacySelection } = useRetailStore();
   const { L, language, B } = useRetailCopy();
   const toast = useToast();
   const [warehouseId, setWarehouseId] = useState(data.warehouses[0]?.id || '');
@@ -892,10 +910,12 @@ export function PosPage() {
   const subtotal = invoiceSubtotal(items);
   const total = Math.max(0, items.reduce((sum, item) => sum + invoiceLineTotal(item), 0) - Number(discount || 0));
   async function saveInvoice() {
+    if (requiresPharmacySelection) { toast.error(B('Select a pharmacy first.', 'اختر الصيدلية أولًا.')); return; }
     if (!warehouseId) { toast.error(B('Select a warehouse first.', 'اختر المخزن أولًا.')); return; }
     if (!items.length) { toast.info(B('Add at least one product.', 'أضف صنفًا واحدًا على الأقل.')); return; }
     if (!canApplySale(data, warehouseId, items)) { toast.error(L('insufficient')); return; }
     let createdInvoice = null;
+    const previousInvoiceIds = new Set(data.salesInvoices.map((invoice) => invoice.id));
     try {
       const fresh = await setData((draft) => {
         createdInvoice = { id: makeId('sal'), number: nextDocNumber('SAL', draft.salesInvoices), date: todayIso(), warehouseId, customerId, paymentMethod: 'cash', discount: normalizeMoney(discount), paid: normalizeMoney(paid), notes: notes || 'Created from POS', status: 'active', items: items.map((item) => ({ ...item })) };
@@ -903,7 +923,7 @@ export function PosPage() {
         applyStockForInvoice(draft, createdInvoice, 'sale');
         return draft;
       });
-      const savedInvoice = fresh.salesInvoices.find((invoice) => invoice.number === createdInvoice.number) || createdInvoice;
+      const savedInvoice = fresh.salesInvoices.find((invoice) => !previousInvoiceIds.has(invoice.id)) || fresh.salesInvoices[0] || createdInvoice;
       setLastInvoice(savedInvoice);
       setItems([]);
       setDiscount(0);
@@ -924,13 +944,13 @@ export function PosPage() {
   }
   const previewInvoice = { id: 'draft', number: L('draft'), date: todayIso(), warehouseId, customerId, paymentMethod: 'cash', discount: normalizeMoney(discount), paid: normalizeMoney(paid), notes, status: 'draft', items };
   return <div className="space-y-6"><PageTitle icon={ShoppingCart} title={B('Point of Sale / POS', 'نقطة البيع')} description={B('Create sales invoices with customer, warehouse, product search, barcode-reader input, discount, paid amount, due and print-ready receipt.', 'إنشاء فواتير بيع مع العميل والمخزن والبحث عن الصنف أو قارئ الباركود والخصم والمدفوع والمتبقي ومعاينة الطباعة.')} />
-    <section className="grid gap-6 xl:grid-cols-[1fr_25rem]"><div className="card p-6"><div className="grid gap-4 md:grid-cols-2"><SelectInput label={L('warehouse')} value={warehouseId} onChange={setWarehouseId} disabled={!data.warehouses.length} placeholder={B('Choose warehouse', 'اختر المخزن')}>{data.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectInput><SelectInput label={L('customer')} value={customerId} onChange={setCustomerId} disabled={!data.customers.length} placeholder={B('Choose customer', 'اختر العميل')}>{data.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</SelectInput></div><div className="mt-6"><InvoiceItemEditor data={data} warehouseId={warehouseId} items={items} setItems={setItems} mode="sale" /></div></div><aside className="card h-fit p-6"><h3 className="text-xl font-semibold text-primary">{L('invoiceSummary')}</h3><div className="mt-5 space-y-3"><div className="flex justify-between"><span className="text-muted">{L('subtotal')}</span><strong>{formatCurrency(subtotal, language)}</strong></div><TextInput label={L('discount')} type="number" min="0" value={discount} onChange={setDiscount} /><TextInput label={L('paid')} type="number" min="0" value={paid} onChange={setPaid} /><TextInput label={L('notes')} value={notes} onChange={setNotes} /><div className="flex justify-between border-t border-soft pt-4"><span className="text-muted">{L('total')}</span><strong>{formatCurrency(total, language)}</strong></div><div className="flex justify-between"><span className="text-muted">{L('due')}</span><strong>{formatCurrency(Math.max(0, total - Number(paid || 0)), language)}</strong></div><button type="button" className="btn-primary w-full gap-2" disabled={!warehouseId || !items.length} onClick={saveInvoice}><Receipt className="h-4 w-4" />{L('save')}</button><button type="button" className="btn-secondary w-full gap-2" onClick={() => printElementById('pos-print-preview', B('Sales Invoice', 'فاتورة بيع'))}><Printer className="h-4 w-4" />{L('thermalPrint')}</button><button type="button" className="btn-danger w-full gap-2" onClick={cancelDraft} disabled={!items.length && !discount && !paid && !notes && !lastInvoice}><Ban className="h-4 w-4" />{L('void')}</button></div></aside></section>
+    <section className="grid gap-6 xl:grid-cols-[1fr_25rem]"><div className="card p-6"><div className="grid gap-4 md:grid-cols-2"><SelectInput label={L('warehouse')} value={warehouseId} onChange={setWarehouseId} placeholder={B('Choose warehouse', 'اختر المخزن')} emptyText={B('No warehouses available. Refresh the page.', 'لا توجد مخازن متاحة. حدّث الصفحة.')}>{data.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectInput><SelectInput label={L('customer')} value={customerId} onChange={setCustomerId} placeholder={B('Choose customer', 'اختر العميل')} emptyText={B('No customers available. Add a customer first.', 'لا يوجد عملاء متاحون. أضف عميلاً أولًا.')}>{data.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</SelectInput></div><div className="mt-6"><InvoiceItemEditor data={data} warehouseId={warehouseId} items={items} setItems={setItems} mode="sale" /></div></div><aside className="card h-fit p-6"><h3 className="text-xl font-semibold text-primary">{L('invoiceSummary')}</h3><div className="mt-5 space-y-3"><div className="flex justify-between"><span className="text-muted">{L('subtotal')}</span><strong>{formatCurrency(subtotal, language)}</strong></div><TextInput label={L('discount')} type="number" min="0" value={discount} onChange={setDiscount} /><TextInput label={L('paid')} type="number" min="0" value={paid} onChange={setPaid} /><TextInput label={L('notes')} value={notes} onChange={setNotes} /><div className="flex justify-between border-t border-soft pt-4"><span className="text-muted">{L('total')}</span><strong>{formatCurrency(total, language)}</strong></div><div className="flex justify-between"><span className="text-muted">{L('due')}</span><strong>{formatCurrency(Math.max(0, total - Number(paid || 0)), language)}</strong></div><button type="button" className="btn-primary w-full gap-2" disabled={isSaving || requiresPharmacySelection || !warehouseId || !items.length} onClick={saveInvoice}><Receipt className="h-4 w-4" />{isSaving ? B('Saving…', 'جارٍ الحفظ…') : L('save')}</button><button type="button" className="btn-secondary w-full gap-2" onClick={() => printElementById('pos-print-preview', B('Sales Invoice', 'فاتورة بيع'))}><Printer className="h-4 w-4" />{L('thermalPrint')}</button><button type="button" className="btn-danger w-full gap-2" onClick={cancelDraft} disabled={!items.length && !discount && !paid && !notes && !lastInvoice}><Ban className="h-4 w-4" />{L('void')}</button></div></aside></section>
     <section className="card p-6"><h3 className="mb-4 text-lg font-semibold text-primary">{L('printPreview')}</h3><InvoicePrintable id="pos-print-preview" data={data} invoice={lastInvoice || previewInvoice} kind="sale" /></section>
   </div>;
 }
 
 export function PurchasesPage() {
-  const { data, setData } = useRetailStore();
+  const { data, setData, isSaving } = useRetailStore();
   const { L, language, B } = useRetailCopy();
   const toast = useToast();
   const [warehouseId, setWarehouseId] = useState(data.warehouses[0]?.id || '');
@@ -971,7 +991,7 @@ export function PurchasesPage() {
     }
   }
   return <div className="space-y-6"><PageTitle icon={PackagePlus} title={B('Purchase Invoice', 'فاتورة مشتريات')} description={B('Create supplier purchase invoices and automatically add quantities to the selected warehouse.', 'إنشاء فواتير شراء للموردين وإضافة الكميات تلقائيًا للمخزن المحدد.')} />
-    <section className="card p-6"><div className="grid gap-4 md:grid-cols-2"><SelectInput label={L('warehouse')} value={warehouseId} onChange={setWarehouseId} disabled={!data.warehouses.length} placeholder={B('Choose warehouse', 'اختر المخزن')}>{data.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectInput><SelectInput label={L('supplier')} value={supplierId} onChange={setSupplierId} disabled={!data.suppliers.length} placeholder={B('Choose supplier', 'اختر المورد')}>{data.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</SelectInput></div><div className="mt-6"><InvoiceItemEditor data={data} warehouseId={warehouseId} items={items} setItems={setItems} mode="purchase" /></div><div className="mt-6 grid gap-4 md:grid-cols-5"><TextInput label={L('discount')} type="number" min="0" value={discount} onChange={setDiscount} /><TextInput label={L('paid')} type="number" min="0" value={paid} onChange={setPaid} /><TextInput label={L('notes')} value={notes} onChange={setNotes} /><div className="sub-card p-4"><p className="text-sm text-muted">{L('total')}</p><p className="text-2xl font-semibold text-primary">{formatCurrency(total, language)}</p></div><div className="flex items-end"><button type="button" className="btn-primary w-full gap-2" disabled={!warehouseId || !items.length} onClick={saveInvoice}><Save className="h-4 w-4" />{L('save')}</button></div></div></section>
+    <section className="card p-6"><div className="grid gap-4 md:grid-cols-2"><SelectInput label={L('warehouse')} value={warehouseId} onChange={setWarehouseId} placeholder={B('Choose warehouse', 'اختر المخزن')} emptyText={B('No warehouses available. Refresh the page.', 'لا توجد مخازن متاحة. حدّث الصفحة.')}>{data.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectInput><SelectInput label={L('supplier')} value={supplierId} onChange={setSupplierId} placeholder={B('Choose supplier', 'اختر المورد')} emptyText={B('No suppliers available. Add a supplier first.', 'لا يوجد موردون متاحون. أضف موردًا أولًا.')}>{data.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</SelectInput></div><div className="mt-6"><InvoiceItemEditor data={data} warehouseId={warehouseId} items={items} setItems={setItems} mode="purchase" /></div><div className="mt-6 grid gap-4 md:grid-cols-5"><TextInput label={L('discount')} type="number" min="0" value={discount} onChange={setDiscount} /><TextInput label={L('paid')} type="number" min="0" value={paid} onChange={setPaid} /><TextInput label={L('notes')} value={notes} onChange={setNotes} /><div className="sub-card p-4"><p className="text-sm text-muted">{L('total')}</p><p className="text-2xl font-semibold text-primary">{formatCurrency(total, language)}</p></div><div className="flex items-end"><button type="button" className="btn-primary w-full gap-2" disabled={isSaving || !warehouseId || !items.length} onClick={saveInvoice}><Save className="h-4 w-4" />{isSaving ? B('Saving…', 'جارٍ الحفظ…') : L('save')}</button></div></div></section>
   </div>;
 }
 
@@ -1084,7 +1104,7 @@ export function InvoicesPage() {
   function resetFilters() { setQuery(''); setType('all'); setWarehouseId('all'); setPartyId('all'); setStatus('all'); setPayment('all'); setFromDate(''); setToDate(''); }
 
   return <div className="space-y-6"><PageTitle icon={FileText} title={B('Invoices List', 'قائمة الفواتير')} description={B('Advanced invoice list with details, edit, delete, cancel/void, print and advanced filters.', 'قائمة فواتير متقدمة تشمل التفاصيل والتعديل والحذف وإلغاء الفاتورة والطباعة والفلاتر المتقدمة.')} />
-    <Toolbar query={query} onQuery={setQuery} onExport={() => { exportToCsv('invoices.csv', rows); toast.success(L('exported')); }} onPrint={() => printElementById('invoices-table', B('Invoices', 'الفواتير'))}><select className="input xl:max-w-48" value={type} onChange={(e) => { setType(e.target.value); setPartyId('all'); }}><option value="all">{L('all')}</option><option value="sale">{B('Sales', 'مبيعات')}</option><option value="purchase">{B('Purchases', 'مشتريات')}</option></select><select className="input xl:max-w-48" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}><option value="all">{L('warehouse')}: {L('all')}</option>{data.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></Toolbar>
+    <Toolbar query={query} onQuery={setQuery} onExport={() => { exportToCsv('invoices.csv', rows); toast.success(L('exported')); }} onPrint={() => printElementById('invoices-table', B('Invoices', 'الفواتير'))}><SelectInput className="w-full xl:max-w-48" value={type} onChange={(nextType) => { setType(nextType); setPartyId('all'); }}><option value="all">{L('all')}</option><option value="sale">{B('Sales', 'مبيعات')}</option><option value="purchase">{B('Purchases', 'مشتريات')}</option></SelectInput><SelectInput className="w-full xl:max-w-56" value={warehouseId} onChange={setWarehouseId}><option value="all">{L('warehouse')}: {L('all')}</option>{data.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectInput></Toolbar>
     <section className="card p-5"><p className="mb-4 font-semibold text-primary">{L('advancedFilters')}</p><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6"><SelectInput label={L('party')} value={partyId} onChange={setPartyId}><option value="all">{L('all')}</option>{filteredParties.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</SelectInput><SelectInput label={L('status')} value={status} onChange={setStatus}><option value="all">{L('all')}</option><option value="active">{L('active')}</option><option value="canceled">{L('canceled')}</option></SelectInput><SelectInput label={L('paymentStatus')} value={payment} onChange={setPayment}><option value="all">{L('all')}</option><option value="paid">{L('fullyPaid')}</option><option value="partial">{L('partial')}</option><option value="unpaid">{L('unpaid')}</option></SelectInput><TextInput label={L('fromDate')} type="date" value={fromDate} onChange={setFromDate} /><TextInput label={L('toDate')} type="date" value={toDate} onChange={setToDate} /><div className="flex items-end"><button type="button" className="btn-secondary w-full" onClick={resetFilters}>{L('resetFilters')}</button></div></div></section>
     <SimpleTable id="invoices-table" empty={L('noData')} columns={[L('type'), B('No.', 'رقم'), L('date'), L('party'), L('warehouse'), L('paymentStatus'), L('status'), L('total'), L('paid'), L('due'), L('actions')]} rows={rows} renderRow={(invoice) => <tr key={`${invoice.kind}-${invoice.id}`} className="border-b border-soft"><td className="px-5 py-4"><span className="badge border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-400/30 dark:bg-cyan-500/10 dark:text-cyan-200">{invoice.kind === 'sale' ? B('Sale', 'بيع') : B('Purchase', 'شراء')}</span></td><td className="px-5 py-4 font-medium text-primary">{invoice.number}</td><td className="px-5 py-4 text-muted">{formatDate(invoice.date, language)}</td><td className="px-5 py-4 text-muted">{invoice.party}</td><td className="px-5 py-4 text-muted">{getWarehouseName(data, invoice.warehouseId)}</td><td className="px-5 py-4"><PaymentBadge invoice={invoice} /></td><td className="px-5 py-4"><StatusBadge status={getInvoiceStatus(invoice)} /></td><td className="px-5 py-4 text-muted">{formatCurrency(invoiceTotal(invoice), language)}</td><td className="px-5 py-4 text-muted">{formatCurrency(invoice.paid, language)}</td><td className="px-5 py-4 text-muted">{formatCurrency(invoiceDue(invoice), language)}</td><td className="px-5 py-4 no-print"><div className="flex flex-wrap gap-2"><button className="btn-icon" title={L('details')} aria-label={L('details')} type="button" onClick={() => setSelected({ invoice: findOriginal(invoice), kind: invoice.kind })}><Eye className="h-4 w-4" /></button><button className="btn-icon" title={L('edit')} aria-label={L('edit')} type="button" disabled={getInvoiceStatus(invoice) === 'canceled'} onClick={() => setEditing({ invoice: findOriginal(invoice), kind: invoice.kind })}><Pencil className="h-4 w-4" /></button><button className="btn-icon" title={L('void')} aria-label={L('void')} type="button" disabled={getInvoiceStatus(invoice) === 'canceled'} onClick={() => cancelInvoice(invoice)}><Ban className="h-4 w-4" /></button><button className="btn-icon-danger" title={L('delete')} aria-label={L('delete')} type="button" onClick={() => deleteInvoice(invoice)}><Trash2 className="h-4 w-4" /></button></div></td></tr>} />
     {selected ? <InvoiceDetailsModal data={data} invoice={selected.invoice} kind={selected.kind} onClose={() => setSelected(null)} /> : null}
@@ -1243,7 +1263,7 @@ export function InventoryCountPage() {
       <StatCard icon={BarChart3} label={L('netDiff')} value={totalDifference} hint={totalDifference > 0 ? B('Show surplus items', 'عرض الأصناف الزائدة') : totalDifference < 0 ? B('Show shortage items', 'عرض الأصناف الناقصة') : B('No net difference', 'لا يوجد فرق صافي')} active={summaryMode === (totalDifference > 0 ? 'surplus' : totalDifference < 0 ? 'shortage' : 'changed')} onClick={() => chooseSummary(totalDifference > 0 ? 'surplus' : totalDifference < 0 ? 'shortage' : 'changed')} />
     </section>
     <section className="card p-5"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-      <div ref={warehouseSelectRef}><SelectInput label={L('warehouse')} value={warehouseId} onChange={(value) => { setWarehouseId(value); setCounts({}); setSummaryMode('all'); }} disabled={!data.warehouses.length} placeholder={B('Choose warehouse', 'اختر المخزن')}>{data.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectInput></div>
+      <div ref={warehouseSelectRef}><SelectInput label={L('warehouse')} value={warehouseId} onChange={(value) => { setWarehouseId(value); setCounts({}); setSummaryMode('all'); }} placeholder={B('Choose warehouse', 'اختر المخزن')} emptyText={B('No warehouses available. Refresh the page.', 'لا توجد مخازن متاحة. حدّث الصفحة.')}>{data.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectInput></div>
       <TextInput label={L('search')} value={query} onChange={setQuery} placeholder={B('Product/code/barcode', 'الصنف/الكود/الباركود')} />
       <div className="xl:col-span-2"><TextInput label={L('notes')} value={notes} onChange={setNotes} /></div>
       <div className="flex items-end gap-3"><button type="button" className="btn-secondary w-full" onClick={loadCurrentStock} disabled={!warehouseId}>{B('Load current', 'تحميل الحالي')}</button><button type="button" className="btn-primary w-full" onClick={applyStocktake} disabled={!warehouseId || !changedRows.length}>{B('Apply', 'تطبيق')}</button></div>
@@ -1333,7 +1353,7 @@ export function TreasuryPage() {
 }
 
 export function ReportsPage() {
-  const { data } = useRetailStore();
+  const { data, requiresPharmacySelection, selectedPharmacyId } = useRetailStore();
   const { L, language, B } = useRetailCopy();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1368,6 +1388,12 @@ export function ReportsPage() {
 
   useEffect(() => {
     let cancelled = false;
+    if (requiresPharmacySelection) {
+      setServerReport({ type: backendReportType, data: [], summary: {} });
+      setReportError('');
+      setIsLoadingReport(false);
+      return () => { cancelled = true; };
+    }
     const params = new URLSearchParams({ type: backendReportType });
     if (fromDate) params.set('from', fromDate);
     if (toDate) params.set('to', toDate);
@@ -1388,7 +1414,7 @@ export function ReportsPage() {
         if (!cancelled) setIsLoadingReport(false);
       });
     return () => { cancelled = true; };
-  }, [backendReportType, fromDate, toDate, warehouseId]);
+  }, [backendReportType, fromDate, toDate, warehouseId, requiresPharmacySelection, selectedPharmacyId]);
 
   const activeSales = data.salesInvoices.filter((invoice) => getInvoiceStatus(invoice) !== 'canceled');
   const activePurchases = data.purchaseInvoices.filter((invoice) => getInvoiceStatus(invoice) !== 'canceled');

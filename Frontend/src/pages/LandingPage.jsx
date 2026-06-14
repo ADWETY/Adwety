@@ -32,9 +32,9 @@ export default function LandingPage() {
         <div>
           <span className="badge border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-400/30 dark:bg-cyan-500/10 dark:text-cyan-200">{t('app.graduationDemo')}</span>
           <h1 className="mt-6 text-4xl font-bold tracking-tight text-primary md:text-6xl">{t('pages.landing.title')}</h1>
-          <p className="mt-6 max-w-xl text-lg text-muted">{t('landing.heroLead')}</p>
+          <p className="mt-6 max-w-xl text-lg text-muted">{t('landing.heroLead')}</p><p className="mt-3 text-sm font-medium text-cyan-700 dark:text-cyan-200">Admin and pharmacy staff portal</p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link className="btn-primary" to="/register">{t('actions.getStarted')}</Link>
+            <Link className="btn-primary" to="/login">{t('actions.getStarted')}</Link>
             <Link className="btn-secondary" to="/login">{t('actions.login')}</Link>
           </div>
         </div>

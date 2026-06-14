@@ -1,4 +1,4 @@
-import { ArrowLeftRight, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileText, Headphones, Home, LogOut, PackagePlus, PackageX, Pill, PlusCircle, Receipt, RotateCcw, Settings, ScanLine, ShoppingCart, Tags, Truck, Users, UsersRound, WalletCards, Warehouse } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileText, Headphones, Home, LogOut, PackagePlus, PackageX, Pill, PlusCircle, Receipt, RotateCcw, Settings, ShoppingCart, Tags, Truck, Users, UsersRound, WalletCards, Warehouse } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import RoleBadge from './RoleBadge';
 import { useAuth } from '../context/AuthContext';
@@ -8,27 +8,26 @@ import { ROLE_GROUPS, hasRole } from '../lib/roles';
 
 const items = [
   { to: '/', labelKey: 'nav.dashboard', label: 'Dashboard', icon: Home, roles: ROLE_GROUPS.dashboard },
-  { to: '/retail-dashboard', labelKey: 'nav.retailDashboard', label: 'Retail Dashboard', icon: BarChart3, roles: ROLE_GROUPS.admin },
-  { to: '/pos', labelKey: 'nav.pos', label: 'POS Sales', icon: ShoppingCart, roles: ROLE_GROUPS.admin },
-  { to: '/sales-invoices', labelKey: 'nav.salesInvoices', label: 'Invoices', icon: FileText, roles: ROLE_GROUPS.admin },
-  { to: '/purchases', labelKey: 'nav.purchases', label: 'Purchases', icon: PackagePlus, roles: ROLE_GROUPS.admin },
-  { to: '/returns', labelKey: 'nav.returns', label: 'Returns', icon: RotateCcw, roles: ROLE_GROUPS.admin },
-  { to: '/products', labelKey: 'nav.products', label: 'Products', icon: Boxes, roles: ROLE_GROUPS.admin },
-  { to: '/categories', labelKey: 'nav.categories', label: 'Categories', icon: Tags, roles: ROLE_GROUPS.admin },
-  { to: '/warehouses', labelKey: 'nav.warehouses', label: 'Warehouses', icon: Warehouse, roles: ROLE_GROUPS.admin },
-  { to: '/transfers', labelKey: 'nav.transfers', label: 'Transfers', icon: ArrowLeftRight, roles: ROLE_GROUPS.admin },
-  { to: '/inventory-count', labelKey: 'nav.inventoryCount', label: 'Stocktake', icon: ClipboardCheck, roles: ROLE_GROUPS.admin },
-  { to: '/customers', labelKey: 'nav.customers', label: 'Customers', icon: UsersRound, roles: ROLE_GROUPS.admin },
-  { to: '/suppliers', labelKey: 'nav.suppliers', label: 'Suppliers', icon: Truck, roles: ROLE_GROUPS.admin },
-  { to: '/treasury', labelKey: 'nav.treasury', label: 'Treasury', icon: WalletCards, roles: ROLE_GROUPS.admin },
-  { to: '/business-reports', labelKey: 'nav.businessReports', label: 'Business Reports', icon: Receipt, roles: ROLE_GROUPS.admin },
+  { to: '/retail-dashboard', labelKey: 'nav.retailDashboard', label: 'Retail Dashboard', icon: BarChart3, roles: ROLE_GROUPS.retail },
+  { to: '/pos', labelKey: 'nav.pos', label: 'POS Sales', icon: ShoppingCart, roles: ROLE_GROUPS.retail },
+  { to: '/sales-invoices', labelKey: 'nav.salesInvoices', label: 'Invoices', icon: FileText, roles: ROLE_GROUPS.retail },
+  { to: '/purchases', labelKey: 'nav.purchases', label: 'Purchases', icon: PackagePlus, roles: ROLE_GROUPS.retail },
+  { to: '/returns', labelKey: 'nav.returns', label: 'Returns', icon: RotateCcw, roles: ROLE_GROUPS.retail },
+  { to: '/products', labelKey: 'nav.products', label: 'Products', icon: Boxes, roles: ROLE_GROUPS.retail },
+  { to: '/categories', labelKey: 'nav.categories', label: 'Categories', icon: Tags, roles: ROLE_GROUPS.retail },
+  { to: '/warehouses', labelKey: 'nav.warehouses', label: 'Warehouses', icon: Warehouse, roles: ROLE_GROUPS.retail },
+  { to: '/transfers', labelKey: 'nav.transfers', label: 'Transfers', icon: ArrowLeftRight, roles: ROLE_GROUPS.retail },
+  { to: '/inventory-count', labelKey: 'nav.inventoryCount', label: 'Stocktake', icon: ClipboardCheck, roles: ROLE_GROUPS.retail },
+  { to: '/customers', labelKey: 'nav.customers', label: 'Customers', icon: UsersRound, roles: ROLE_GROUPS.retail },
+  { to: '/suppliers', labelKey: 'nav.suppliers', label: 'Suppliers', icon: Truck, roles: ROLE_GROUPS.retail },
+  { to: '/treasury', labelKey: 'nav.treasury', label: 'Treasury', icon: WalletCards, roles: ROLE_GROUPS.retail },
+  { to: '/business-reports', labelKey: 'nav.businessReports', label: 'Business Reports', icon: Receipt, roles: ROLE_GROUPS.retail },
   { to: '/medicines', labelKey: 'nav.medicines', label: 'Medicines', icon: Pill, roles: ROLE_GROUPS.medicine },
   { to: '/medicines/new', labelKey: 'nav.addMedicine', label: 'Add Medicine', icon: PlusCircle, roles: ROLE_GROUPS.admin },
   { to: '/low-stock', labelKey: 'nav.lowStock', label: 'Low Stock', icon: PackageX, roles: ROLE_GROUPS.admin },
   { to: '/pharmacies', labelKey: 'nav.pharmacies', label: 'Pharmacies', icon: Building2, roles: ROLE_GROUPS.admin },
   { to: '/pharmacies/new', labelKey: 'nav.addPharmacy', label: 'Add Pharmacy', icon: PlusCircle, roles: ROLE_GROUPS.super },
   { to: '/analytics', labelKey: 'nav.analytics', label: 'Analytics', icon: BarChart3, roles: ROLE_GROUPS.admin },
-  { to: '/scanner', labelKey: 'nav.prescriptionScanner', label: 'Prescription Scanner', icon: ScanLine, roles: ROLE_GROUPS.scanner },
   { to: '/notifications', labelKey: 'nav.notifications', label: 'Notifications', icon: Bell, roles: ROLE_GROUPS.notifications },
   { to: '/pharmacy-requests', labelKey: 'nav.pharmacyRequests', label: 'Pharmacy Requests', icon: ClipboardList, roles: ROLE_GROUPS.super },
   { to: '/support-tickets', labelKey: 'nav.supportTickets', label: 'Support Tickets', icon: Headphones, roles: ROLE_GROUPS.support },

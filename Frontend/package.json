@@ -8,7 +8,10 @@
     "dev": "vite --host 0.0.0.0 --port 6501",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 6501",
-    "security:check": "node scripts/security-check.mjs"
+    "security:check": "node scripts/security-check.mjs",
+    "test:retail-selects": "node scripts/retail-select-check.mjs",
+    "test:retail-stability": "node scripts/retail-stability-check.mjs",
+    "test:admin-pos-pharmacy": "node scripts/admin-pos-pharmacy-check.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.511.0",
@@ -17,10 +20,14 @@
     "react-router-dom": "6.30.4"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-react": "4.3.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
-    "vite": "8.0.16"
+    "vite": "5.4.14"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   }
 }

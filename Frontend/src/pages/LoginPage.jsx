@@ -180,7 +180,6 @@ export default function LoginPage() {
             </form>
           )}
 
-          {!otpState ? <p className="mt-6 text-center text-sm text-muted"><Link className="font-semibold text-cyan-700 dark:text-cyan-200" to="/register">{t('actions.register')}</Link></p> : null}
         </section>
       </div>
     </main>

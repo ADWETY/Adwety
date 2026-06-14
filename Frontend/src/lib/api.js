@@ -1,5 +1,20 @@
 import { env } from '../config/env';
 
+export const RETAIL_PHARMACY_STORAGE_KEY = 'adwety.retail.pharmacyId';
+
+export function getRetailPharmacyId() {
+  if (typeof window === 'undefined') return '';
+  return String(window.localStorage.getItem(RETAIL_PHARMACY_STORAGE_KEY) || '').trim();
+}
+
+export function setRetailPharmacyId(pharmacyId) {
+  if (typeof window === 'undefined') return '';
+  const normalized = String(pharmacyId || '').trim();
+  if (normalized) window.localStorage.setItem(RETAIL_PHARMACY_STORAGE_KEY, normalized);
+  else window.localStorage.removeItem(RETAIL_PHARMACY_STORAGE_KEY);
+  return normalized;
+}
+
 function getCookie(name) {
   const prefix = `${name}=`;
   const value = document.cookie
@@ -41,7 +56,7 @@ function mapDashboardPath(path, method) {
     '/inventory-count', '/inventory-counts', '/treasury'
   ];
   if (retailPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
-    return `/admin${pathname}${query}`;
+    return `/retail${pathname}${query}`;
   }
 
   if (upper === 'GET') {
@@ -81,32 +96,100 @@ function shouldAttemptRefresh(path) {
   return !pathname.startsWith('/auth/');
 }
 
+function isUnsafeMethod(method) {
+  return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(method || 'GET').toUpperCase());
+}
+
+function isPublicAuthWrite(path) {
+  const pathname = splitPath(path).pathname;
+  return [
+    '/auth/login',
+    '/auth/login/verify-otp',
+    '/auth/mfa/login/verify',
+    '/auth/mfa/setup/verify',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+  ].includes(pathname);
+}
+
+function csrfCode(data = {}) {
+  return data?.code || data?.data?.code || data?.error?.code || data?.details?.code || '';
+}
+
 function notifyAuthExpired() {
   window.dispatchEvent(new CustomEvent('adwety:auth-expired'));
 }
 
-async function performFetch(path, options = {}) {
+let csrfBootstrapPromise = null;
+async function bootstrapCsrfToken() {
+  if (!csrfBootstrapPromise) {
+    csrfBootstrapPromise = fetch(`${env.apiBaseUrl}/auth/csrf`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    }).then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.success === false) {
+        const error = new Error(data.message || 'Could not refresh the CSRF token');
+        error.status = response.status;
+        error.payload = data;
+        throw error;
+      }
+      return data?.data?.csrf_token || data?.csrf_token || getCsrfToken();
+    }).finally(() => { csrfBootstrapPromise = null; });
+  }
+  return csrfBootstrapPromise;
+}
+
+async function csrfForRequest(path, method, { force = false } = {}) {
+  if (!isUnsafeMethod(method) || isPublicAuthWrite(path)) return '';
+  const current = getCsrfToken();
+  if (current && !force) return current;
+  try {
+    return await bootstrapCsrfToken();
+  } catch (_error) {
+    // Let the original request reach the server. A 401 can still trigger the
+    // normal refresh/logout flow, while a CSRF 403 is handled by one retry.
+    return current;
+  }
+}
+
+async function performFetch(path, options = {}, state = {}) {
   const method = String(options.method || 'GET').toUpperCase();
   const headers = {
     Accept: 'application/json',
     ...normalizeHeaders(options.headers),
   };
 
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    const csrfToken = getCsrfToken();
+  if (isUnsafeMethod(method)) {
+    const csrfToken = await csrfForRequest(path, method, { force: state.forceCsrf === true });
     if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
   }
 
   const mappedPath = mapDashboardPath(path, method);
-  const response = await fetch(`${env.apiBaseUrl}${mappedPath}`, {
-    ...options,
-    method,
-    credentials: 'include',
-    headers,
-  });
+  if (mappedPath === '/retail' || mappedPath.startsWith('/retail/')) {
+    const pharmacyId = getRetailPharmacyId();
+    if (pharmacyId) headers['X-Pharmacy-ID'] = pharmacyId;
+  }
+  let response;
+  try {
+    response = await fetch(`${env.apiBaseUrl}${mappedPath}`, {
+      ...options,
+      method,
+      credentials: 'include',
+      headers,
+    });
+  } catch (networkError) {
+    const error = new Error('تعذر الاتصال بالخادم. تأكد أن الباك إند يعمل على المنفذ 6500 وأن إعداد VITE_API_BASE_URL صحيح.');
+    error.cause = networkError;
+    error.status = 0;
+    throw error;
+  }
   const data = await response.json().catch(() => ({}));
   return { response, data };
 }
+
+const inFlightGetRequests = new Map();
 
 let refreshPromise = null;
 async function refreshBrowserSession() {
@@ -129,21 +212,49 @@ async function refreshBrowserSession() {
 }
 
 async function rawApiRequest(path, options = {}, state = {}) {
-  const { response, data } = await performFetch(path, options);
+  const { response, data } = await performFetch(path, options, state);
+
+  if (
+    response.status === 403
+    && csrfCode(data) === 'CSRF_INVALID'
+    && isUnsafeMethod(options.method)
+    && !state.csrfRetried
+  ) {
+    try {
+      await bootstrapCsrfToken();
+      return rawApiRequest(path, options, { ...state, csrfRetried: true, forceCsrf: true });
+    } catch (_csrfError) {
+      // Fall through and expose the original server error.
+    }
+  }
 
   if (response.status === 401 && !state.retried && shouldAttemptRefresh(path)) {
     try {
       await refreshBrowserSession();
-      return rawApiRequest(path, options, { retried: true });
+      return rawApiRequest(path, options, { ...state, retried: true });
     } catch (_refreshError) {
       notifyAuthExpired();
     }
   }
 
   if (!response.ok || data.success === false) {
-    const error = new Error(data.message || `Request failed with status ${response.status}`);
+    const duplicateFields = Array.isArray(data?.details?.fields) ? data.details.fields : [];
+    const duplicateMessage = data?.details?.code === 'DUPLICATE_KEY'
+      ? (duplicateFields.includes('code')
+          ? 'هذا الكود مستخدم بالفعل داخل الصيدلية المحددة.'
+          : duplicateFields.includes('name')
+            ? 'هذا الاسم مستخدم بالفعل داخل الصيدلية المحددة.'
+            : duplicateFields.includes('number')
+              ? 'رقم المستند مستخدم بالفعل. أعد المحاولة وسيتم إنشاء رقم جديد.'
+              : 'توجد بيانات مكررة بالفعل داخل الصيدلية المحددة.')
+      : '';
+    const message = response.status === 429
+      ? 'تم إرسال طلبات كثيرة في وقت قصير. انتظر قليلًا ثم أعد المحاولة.'
+      : (duplicateMessage || data.message || `Request failed with status ${response.status}`);
+    const error = new Error(message);
     error.status = response.status;
     error.payload = data;
+    error.retryAfter = Number(response.headers.get('Retry-After') || data?.details?.retryAfter || 0);
     throw error;
   }
 
@@ -151,7 +262,21 @@ async function rawApiRequest(path, options = {}, state = {}) {
 }
 
 async function apiRequest(path, options = {}) {
-  return rawApiRequest(path, options);
+  const method = String(options.method || 'GET').toUpperCase();
+  if (method !== 'GET') return rawApiRequest(path, options);
+
+  const mappedPath = mapDashboardPath(path, method);
+  const retailTenantKey = mappedPath === '/retail' || mappedPath.startsWith('/retail/')
+    ? getRetailPharmacyId()
+    : '';
+  const key = `${path}:${retailTenantKey}:${JSON.stringify(normalizeHeaders(options.headers || {}))}`;
+  if (inFlightGetRequests.has(key)) return inFlightGetRequests.get(key);
+
+  const request = rawApiRequest(path, options).finally(() => {
+    inFlightGetRequests.delete(key);
+  });
+  inFlightGetRequests.set(key, request);
+  return request;
 }
 
 function asArray(payload) {

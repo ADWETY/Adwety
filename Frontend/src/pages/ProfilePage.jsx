@@ -188,7 +188,6 @@ export default function ProfilePage() {
             {[
               [t('common.frontendPort'), env.port],
               [t('common.apiBaseUrl'), env.apiBaseUrl],
-              [t('common.uploadLimit'), `${env.maxUploadSizeMb} MB`],
             ].map(([label, value]) => (
               <div key={label} className="sub-card p-4">
                 <p className="text-sm text-muted">{label}</p>

@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { deleteJson, extractArray, extractObject, getJson, postJson, putJson } from './api';
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { deleteJson, extractArray, extractObject, getJson, getRetailPharmacyId, postJson, putJson, setRetailPharmacyId } from './api';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { normalizeRole } from './roles';
 
 export const emptyRetailData = {
   categories: [],
@@ -15,6 +17,34 @@ export const emptyRetailData = {
   inventoryCounts: [],
   treasury: { openingBalance: 0, movements: [] },
 };
+
+const RetailStoreContext = createContext(null);
+const RETAIL_CACHE_TTL_MS = 30 * 1000;
+const RETAIL_SELF_CACHE_KEY = '__linked_pharmacy__';
+const retailDataCaches = new Map();
+const retailLoadPromises = new Map();
+
+function retailCacheKey(pharmacyId = '') {
+  return String(pharmacyId || '').trim() || RETAIL_SELF_CACHE_KEY;
+}
+
+function cacheRetailData(data, pharmacyId = '') {
+  const key = retailCacheKey(pharmacyId);
+  const cached = { data: clone(data), cachedAt: Date.now() };
+  retailDataCaches.set(key, cached);
+  return clone(cached.data);
+}
+
+export function clearRetailDataCache(pharmacyId = '') {
+  if (pharmacyId === null) {
+    retailDataCaches.clear();
+    retailLoadPromises.clear();
+    return;
+  }
+  const key = retailCacheKey(pharmacyId);
+  retailDataCaches.delete(key);
+  retailLoadPromises.delete(key);
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -262,7 +292,7 @@ function personPayload(row = {}) {
 
 function invoicePayload(row = {}) {
   return cleanObject({
-    number: row.number,
+    number: isObjectId(row.id) ? row.number : undefined,
     date: dateForApi(row.date),
     warehouseId: row.warehouseId,
     customerId: row.kind === 'sale' ? (row.customerId || null) : null,
@@ -288,7 +318,7 @@ function returnPayload(row = {}, data = {}) {
   const sourceLine = (sourceInvoice.items || []).find((item) => item.productId === row.productId) || {};
   return cleanObject({
     kind: row.kind || 'sales',
-    number: row.number,
+    number: isObjectId(row.id) ? row.number : undefined,
     date: dateForApi(row.date),
     invoiceId: row.invoiceId || null,
     warehouseId: row.warehouseId || sourceInvoice.warehouseId,
@@ -308,7 +338,7 @@ function returnPayload(row = {}, data = {}) {
 function transferPayload(row = {}) {
   const items = row.items && row.items.length ? row.items : [{ productId: row.productId, qty: row.qty }];
   return cleanObject({
-    number: row.number,
+    number: isObjectId(row.id) ? row.number : undefined,
     date: dateForApi(row.date),
     fromWarehouseId: row.fromWarehouseId,
     toWarehouseId: row.toWarehouseId,
@@ -320,7 +350,7 @@ function transferPayload(row = {}) {
 
 function countPayload(row = {}) {
   return cleanObject({
-    number: row.number,
+    number: isObjectId(row.id) ? row.number : undefined,
     date: dateForApi(row.date),
     warehouseId: row.warehouseId,
     notes: row.notes || '',
@@ -396,11 +426,18 @@ export async function lookupRetailProduct(value, options = {}) {
   return normalizeRetailProduct(extractObject(payload));
 }
 
-export function getRetailData() {
-  return clone(emptyRetailData);
+export function getRetailData(pharmacyId = getRetailPharmacyId()) {
+  const entry = retailDataCaches.get(retailCacheKey(pharmacyId));
+  return clone(entry?.data || emptyRetailData);
 }
 
-export async function loadRetailDataFromApi() {
+export async function loadRetailDataFromApi({ force = false, pharmacyId = getRetailPharmacyId() } = {}) {
+  const key = retailCacheKey(pharmacyId);
+  const entry = retailDataCaches.get(key);
+  const cacheIsFresh = entry && (Date.now() - entry.cachedAt) < RETAIL_CACHE_TTL_MS;
+  if (!force && cacheIsFresh) return clone(entry.data);
+  if (retailLoadPromises.has(key)) return clone(await retailLoadPromises.get(key));
+
   const endpoints = [
     '/categories?limit=300',
     '/warehouses?limit=300',
@@ -415,19 +452,26 @@ export async function loadRetailDataFromApi() {
     '/treasury?limit=300',
   ];
 
-  // A failure in a secondary retail endpoint must not erase warehouses/products
-  // that were loaded successfully. Keep partial data and expose the failed paths.
-  const settled = await Promise.allSettled(endpoints.map((endpoint) => getJson(endpoint)));
-  const failures = settled
-    .map((result, index) => result.status === 'rejected' ? { endpoint: endpoints[index], error: result.reason } : null)
-    .filter(Boolean);
+  const loadPromise = (async () => {
+    // A failure in a secondary retail endpoint must not erase warehouses/products
+    // that were loaded successfully. Keep partial data and expose the failed paths.
+    const settled = await Promise.allSettled(endpoints.map((endpoint) => getJson(endpoint)));
+    const failures = settled
+      .map((result, index) => result.status === 'rejected' ? { endpoint: endpoints[index], error: result.reason } : null)
+      .filter(Boolean);
 
-  if (failures.length === settled.length) throw failures[0].error;
+    if (failures.length === settled.length) throw failures[0].error;
 
-  const payloads = settled.map((result) => result.status === 'fulfilled' ? result.value : { data: [] });
-  const data = normalizeRetailDataFromBackend(payloads);
-  data.loadWarnings = failures.map(({ endpoint, error }) => ({ endpoint, message: error?.message || 'Request failed' }));
-  return data;
+    const payloads = settled.map((result) => result.status === 'fulfilled' ? result.value : { data: [] });
+    const data = normalizeRetailDataFromBackend(payloads);
+    data.loadWarnings = failures.map(({ endpoint, error }) => ({ endpoint, message: error?.message || 'Request failed' }));
+    return cacheRetailData(data, pharmacyId);
+  })().finally(() => {
+    retailLoadPromises.delete(key);
+  });
+
+  retailLoadPromises.set(key, loadPromise);
+  return clone(await loadPromise);
 }
 
 function collectionChanged(previous = [], next = []) {
@@ -554,13 +598,42 @@ export async function syncRetailDiff(previousData, nextData) {
   await syncTreasury(previousData, nextData);
 }
 
-export function useRetailStore() {
+function normalizePharmacyOption(row = {}) {
+  return {
+    id: String(row.id || row._id || ''),
+    name: row.name || '',
+    address: row.address || '',
+    status: row.status || 'active',
+  };
+}
+
+async function loadAdminPharmacyOptions() {
+  const options = [];
+  let page = 1;
+  let pages = 1;
+  do {
+    const payload = await getJson(`/pharmacies?limit=100&page=${page}`);
+    options.push(...extractArray(payload).map(normalizePharmacyOption));
+    pages = Math.max(1, Number(payload?.data?.pagination?.pages || payload?.pagination?.pages || 1));
+    page += 1;
+  } while (page <= pages && page <= 50);
+  return options.filter((pharmacy, index, rows) => pharmacy.id && rows.findIndex((row) => row.id === pharmacy.id) === index);
+}
+
+function useRetailStoreState() {
   const toast = useToast();
-  const [data, setData] = useState(() => getRetailData());
-  const [isLoading, setIsLoading] = useState(true);
+  const { session } = useAuth();
+  const isAdminRetail = normalizeRole(session?.role) === 'admin';
+  const [pharmacies, setPharmacies] = useState([]);
+  const [selectedPharmacyId, setSelectedPharmacyId] = useState(() => isAdminRetail ? getRetailPharmacyId() : '');
+  const [isLoadingPharmacies, setIsLoadingPharmacies] = useState(isAdminRetail);
+  const initialTenantId = isAdminRetail ? getRetailPharmacyId() : '';
+  const [data, setData] = useState(() => isAdminRetail && !initialTenantId ? clone(emptyRetailData) : getRetailData(initialTenantId));
+  const [isLoading, setIsLoading] = useState(() => !isAdminRetail || Boolean(initialTenantId));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const dataRef = useRef(data);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     dataRef.current = data;
@@ -568,8 +641,61 @@ export function useRetailStore() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!isAdminRetail) {
+      setRetailPharmacyId('');
+      setPharmacies([]);
+      setSelectedPharmacyId('');
+      setIsLoadingPharmacies(false);
+      return () => { cancelled = true; };
+    }
+
+    setIsLoadingPharmacies(true);
+    loadAdminPharmacyOptions()
+      .then((rows) => {
+        if (cancelled) return;
+        const options = rows.filter((pharmacy) => ['active', 'approved'].includes(pharmacy.status));
+        setPharmacies(options);
+        const storedId = getRetailPharmacyId();
+        const validStoredId = options.some((pharmacy) => pharmacy.id === storedId) ? storedId : '';
+        if (!validStoredId) setRetailPharmacyId('');
+        setSelectedPharmacyId(validStoredId);
+      })
+      .catch((loadError) => {
+        if (cancelled) return;
+        setPharmacies([]);
+        setSelectedPharmacyId('');
+        setRetailPharmacyId('');
+        setError(loadError);
+        toast.error(loadError?.message || 'تعذر تحميل قائمة الصيدليات.');
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingPharmacies(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [isAdminRetail, toast]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (isAdminRetail && isLoadingPharmacies) return () => { cancelled = true; };
+    if (isAdminRetail && !selectedPharmacyId) {
+      const empty = clone(emptyRetailData);
+      dataRef.current = empty;
+      setData(empty);
+      setError(null);
+      setIsLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    const tenantId = isAdminRetail ? selectedPharmacyId : '';
+    setRetailPharmacyId(tenantId);
+    const cached = getRetailData(tenantId);
+    dataRef.current = cached;
+    setData(cached);
     setIsLoading(true);
-    loadRetailDataFromApi()
+    setError(null);
+
+    loadRetailDataFromApi({ pharmacyId: tenantId })
       .then((fresh) => {
         if (!cancelled) {
           dataRef.current = fresh;
@@ -580,8 +706,9 @@ export function useRetailStore() {
       .catch((loadError) => {
         if (!cancelled) {
           setError(loadError);
-          dataRef.current = clone(emptyRetailData);
-          setData(clone(emptyRetailData));
+          const fallback = getRetailData(tenantId);
+          dataRef.current = fallback;
+          setData(fallback);
           toast.error(loadError?.message || 'Could not load retail data from the backend.');
         }
       })
@@ -589,15 +716,36 @@ export function useRetailStore() {
         if (!cancelled) setIsLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [isAdminRetail, isLoadingPharmacies, selectedPharmacyId, toast]);
+
+  const requiresPharmacySelection = isAdminRetail && !selectedPharmacyId;
+
+  const selectPharmacy = useCallback((pharmacyId) => {
+    if (savingRef.current) return;
+    const normalized = String(pharmacyId || '').trim();
+    if (normalized && !pharmacies.some((pharmacy) => pharmacy.id === normalized)) return;
+    setRetailPharmacyId(normalized);
+    setSelectedPharmacyId(normalized);
+    const next = normalized ? getRetailData(normalized) : clone(emptyRetailData);
+    dataRef.current = next;
+    setData(next);
+    setError(null);
+  }, [pharmacies]);
 
   const updateData = useCallback(async (updater) => {
+    if (isAdminRetail && !selectedPharmacyId) {
+      throw new Error('اختر الصيدلية أولًا قبل الحفظ. / Select a pharmacy before saving.');
+    }
+    if (savingRef.current) return dataRef.current;
+    savingRef.current = true;
     setIsSaving(true);
+    const tenantId = isAdminRetail ? selectedPharmacyId : '';
+    setRetailPharmacyId(tenantId);
     try {
       const previous = clone(dataRef.current);
       const next = typeof updater === 'function' ? updater(clone(previous)) : clone(updater);
       await syncRetailDiff(previous, next);
-      const fresh = await loadRetailDataFromApi();
+      const fresh = await loadRetailDataFromApi({ force: true, pharmacyId: tenantId });
       dataRef.current = fresh;
       setData(fresh);
       setError(fresh.loadWarnings?.length ? new Error(`Some retail endpoints failed: ${fresh.loadWarnings.map((item) => item.endpoint).join(', ')}`) : null);
@@ -606,22 +754,33 @@ export function useRetailStore() {
       setError(syncError);
       throw syncError;
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
-  }, []);
+  }, [isAdminRetail, selectedPharmacyId]);
 
   const reset = useCallback(async () => {
-    const fresh = await loadRetailDataFromApi();
+    if (isAdminRetail && !selectedPharmacyId) {
+      throw new Error('اختر الصيدلية أولًا. / Select a pharmacy first.');
+    }
+    const tenantId = isAdminRetail ? selectedPharmacyId : '';
+    setRetailPharmacyId(tenantId);
+    const fresh = await loadRetailDataFromApi({ force: true, pharmacyId: tenantId });
     dataRef.current = fresh;
     setData(fresh);
     setError(fresh.loadWarnings?.length ? new Error(`Some retail endpoints failed: ${fresh.loadWarnings.map((item) => item.endpoint).join(', ')}`) : null);
     return fresh;
-  }, []);
+  }, [isAdminRetail, selectedPharmacyId]);
 
   const refresh = useCallback(async () => {
+    if (isAdminRetail && !selectedPharmacyId) {
+      throw new Error('اختر الصيدلية أولًا. / Select a pharmacy first.');
+    }
+    const tenantId = isAdminRetail ? selectedPharmacyId : '';
+    setRetailPharmacyId(tenantId);
     setIsLoading(true);
     try {
-      const fresh = await loadRetailDataFromApi();
+      const fresh = await loadRetailDataFromApi({ force: true, pharmacyId: tenantId });
       dataRef.current = fresh;
       setData(fresh);
       setError(fresh.loadWarnings?.length ? new Error(`Some retail endpoints failed: ${fresh.loadWarnings.map((item) => item.endpoint).join(', ')}`) : null);
@@ -632,9 +791,38 @@ export function useRetailStore() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isAdminRetail, selectedPharmacyId]);
 
-  return useMemo(() => ({ data, setData: updateData, reset, refresh, isLoading, isSaving, error, isBackendConnected: !error }), [data, updateData, reset, refresh, isLoading, isSaving, error]);
+  const selectedPharmacy = pharmacies.find((pharmacy) => pharmacy.id === selectedPharmacyId) || null;
+
+  return useMemo(() => ({
+    data,
+    setData: updateData,
+    reset,
+    refresh,
+    isLoading,
+    isSaving,
+    error,
+    isBackendConnected: !error,
+    pharmacies,
+    selectedPharmacyId,
+    selectedPharmacy,
+    selectPharmacy,
+    requiresPharmacySelection,
+    isAdminRetail,
+    isLoadingPharmacies,
+  }), [data, updateData, reset, refresh, isLoading, isSaving, error, pharmacies, selectedPharmacyId, selectedPharmacy, selectPharmacy, requiresPharmacySelection, isAdminRetail, isLoadingPharmacies]);
+}
+
+export function RetailStoreProvider({ children }) {
+  const value = useRetailStoreState();
+  return createElement(RetailStoreContext.Provider, { value }, children);
+}
+
+export function useRetailStore() {
+  const value = useContext(RetailStoreContext);
+  if (!value) throw new Error('useRetailStore must be used inside RetailStoreProvider');
+  return value;
 }
 
 export function invoiceSubtotal(items = []) {

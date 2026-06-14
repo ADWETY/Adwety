@@ -216,3 +216,21 @@ body {
 @media (max-width: 640px) {
   table.responsive-table { min-width: 0 !important; }
 }
+
+/* Retail selectors: consistent click target, RTL-safe arrow and visible options. */
+.select-control {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-inline-start: 1rem;
+  padding-inline-end: 3rem;
+}
+
+.select-control:disabled {
+  cursor: not-allowed;
+}
+
+.select-control option {
+  background: var(--surface-strong);
+  color: var(--text);
+}
