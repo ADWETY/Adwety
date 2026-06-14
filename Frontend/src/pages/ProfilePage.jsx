@@ -49,7 +49,7 @@ export default function ProfilePage() {
       });
       setProfile(extractObject(result, null));
       updateSessionProfile(extractObject(result, null));
-      setMessage('Profile saved successfully.');
+      setMessage(t('profile.saved'));
       toast.success(t('toast.saved'));
     } catch (saveError) {
       setError(saveError.message);
@@ -66,8 +66,9 @@ export default function ProfilePage() {
     setMessage('');
     try {
       const result = await postJson('/profile/email/request-otp', { email: emailForm.email });
-      setOtpState(extractObject(result, null));
-      setMessage(t('otp.sent'));
+      const otpInfo = extractObject(result, null);
+      setOtpState(otpInfo);
+      setMessage(otpInfo?.otp_code ? `${t('otp.sent')} · ${t('profile.devOtp')}: ${otpInfo.otp_code}` : t('otp.sent'));
       toast.success(t('otp.sent'));
     } catch (requestError) {
       setError(requestError.message);
@@ -93,7 +94,7 @@ export default function ProfilePage() {
       updateSessionProfile(data);
       setEmailForm({ email: data?.email || '', otp: '' });
       setOtpState(null);
-      setMessage('Email updated successfully.');
+      setMessage(t('profile.emailUpdated'));
       toast.success(t('otp.verified'));
     } catch (confirmError) {
       setError(confirmError.message);
@@ -106,15 +107,15 @@ export default function ProfilePage() {
   return (
     <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
       <section className="card p-6">
-        <h3 className="text-xl font-semibold text-primary">Active dashboard session</h3>
+        <h3 className="text-xl font-semibold text-primary">{t('common.activeDashboardSession')}</h3>
         <div className="mt-5 space-y-4">
           {[
             [t('common.name'), activeProfile.name],
             [t('common.email'), activeProfile.email],
             [t('common.phone'), activeProfile.phone_number || activeProfile.phoneNumber || '—'],
-            [t('app.language'), language === 'ar' ? 'العربية' : 'English'],
-            ['Theme', theme],
-            ['Assigned pharmacy', session?.pharmacyName || '—'],
+            [t('app.language'), language === 'ar' ? t('common.arabic') : t('common.english')],
+            [t('common.theme'), t(`common.${theme}`)],
+            [t('common.assignedPharmacy'), session?.pharmacyName || '—'],
           ].map(([label, value]) => (
             <div key={label} className="sub-card p-4">
               <p className="text-sm text-muted">{label}</p>
@@ -130,7 +131,7 @@ export default function ProfilePage() {
 
       <section className="space-y-6">
         <div className="card p-6">
-          <h3 className="text-xl font-semibold text-primary">Edit profile</h3>
+          <h3 className="text-xl font-semibold text-primary">{t('common.editProfile')}</h3>
           <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={saveProfile}>
             <div>
               <label className="label">{t('common.name')}</label>
@@ -150,7 +151,7 @@ export default function ProfilePage() {
         </div>
 
         <div className="card p-6">
-          <h3 className="text-xl font-semibold text-primary">Change email with OTP</h3>
+          <h3 className="text-xl font-semibold text-primary">{t('common.changeEmailOtp')}</h3>
           {!otpState ? (
             <form className="mt-5 space-y-4" onSubmit={requestEmailOtp}>
               <div>
@@ -182,15 +183,12 @@ export default function ProfilePage() {
         </div>
 
         <div className="card p-6">
-          <h3 className="text-xl font-semibold text-primary">System & AI Configuration</h3>
+          <h3 className="text-xl font-semibold text-primary">{t('common.systemConfiguration')}</h3>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {[
-              ['Frontend port', env.port],
-              ['API base URL', env.apiBaseUrl],
-              ['AI provider', env.aiProvider],
-              ['Gemini model', env.geminiModel],
-              ['Future AI label', env.customAiLabel],
-              ['Upload limit', `${env.maxUploadSizeMb} MB`],
+              [t('common.frontendPort'), env.port],
+              [t('common.apiBaseUrl'), env.apiBaseUrl],
+              [t('common.uploadLimit'), `${env.maxUploadSizeMb} MB`],
             ].map(([label, value]) => (
               <div key={label} className="sub-card p-4">
                 <p className="text-sm text-muted">{label}</p>
@@ -201,9 +199,9 @@ export default function ProfilePage() {
         </div>
 
         <div className="card p-6">
-          <h3 className="text-xl font-semibold text-primary">Backend profile endpoint</h3>
+          <h3 className="text-xl font-semibold text-primary">{t('common.backendProfileEndpoint')}</h3>
           {error && !profile ? (
-            <EmptyState title="Profile endpoint error" description={error} />
+            <EmptyState title={t('common.profileEndpointError')} description={error} />
           ) : (
             <pre className="mt-4 overflow-auto rounded-3xl border border-soft bg-slate-50 p-4 text-sm text-primary dark:bg-slate-950/50">
 {JSON.stringify(profile, null, 2)}

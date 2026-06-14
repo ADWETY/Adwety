@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, BarChart3, Bell, Building2, PackageCheck, Pill, PlusCircle, RefreshCw, ScanLine, Wallet } from 'lucide-react';
+import { AlertTriangle, BarChart3, Bell, Building2, PackageCheck, Pill, PlusCircle, RefreshCw, Wallet } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import StatCard from '../components/StatCard';
 import { extractArray, getJson } from '../lib/api';
-import { demoMedicines, demoNotifications, demoPharmacies, demoScanTrend } from '../lib/demoData';
 import { stockStatus, stockTone } from '../lib/utils';
 import { ROLE_GROUPS, hasRole } from '../lib/roles';
 import { useAuth } from '../context/AuthContext';
@@ -38,12 +37,12 @@ function getNumber(...values) {
   return 0;
 }
 
-function getMedicineName(item) {
-  return item?.name || item?.genericName || item?.generic_name || item?.drug?.name || item?.drug?.genericName || item?.drug?.generic_name || 'Unknown medicine';
+function getMedicineName(item, fallback) {
+  return item?.name || item?.genericName || item?.generic_name || item?.drug?.name || item?.drug?.genericName || item?.drug?.generic_name || fallback;
 }
 
-function getMedicineCategory(item) {
-  return item?.category || item?.drug?.category || 'General';
+function getMedicineCategory(item, fallback) {
+  return item?.category || item?.drug?.category || fallback;
 }
 
 function getQuantity(item) {
@@ -58,13 +57,38 @@ function getPharmacyName(item) {
   return item?.pharmacy_name || item?.pharmacyName || item?.pharmacy?.name || '—';
 }
 
+function localizedNotification(item, t) {
+  if (item?.metadata?.kind === 'low_stock') {
+    const medicine = item.metadata.medicineName || item.metadata.medicine_name || item.title;
+    const pharmacy = item.metadata.pharmacyName || item.metadata.pharmacy_name || t('common.pharmacy');
+    const quantity = item.metadata.quantity ?? '';
+    return {
+      title: `${t('notifications.lowStockTitle')}: ${medicine}`,
+      message: t('notifications.lowStockMessage')
+        .replace('{medicine}', medicine)
+        .replace('{pharmacy}', pharmacy)
+        .replace('{quantity}', String(quantity)),
+    };
+  }
+  if (item?.metadata?.kind === 'pharmacy_request') {
+    const status = item.metadata.status || 'pending';
+    const pharmacy = item.metadata.pharmacyName || item.metadata.pharmacy_name || '';
+    return {
+      title: t(`notifications.pharmacyRequest.${status}.title`),
+      message: t(`notifications.pharmacyRequest.${status}.message`).replace('{pharmacy}', pharmacy),
+    };
+  }
+  return { title: item?.title || '', message: item?.message || '' };
+}
+
 export default function DashboardPage() {
   const { t, language } = usePreferences();
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [dataset, setDataset] = useState({ medicines: demoMedicines, pharmacies: demoPharmacies, notifications: demoNotifications });
+  const [error, setError] = useState('');
+  const [dataset, setDataset] = useState({ medicines: [], pharmacies: [], notifications: [] });
 
   const loadDashboardData = useCallback(async (manual = false) => {
     try {
@@ -78,19 +102,20 @@ export default function DashboardPage() {
       ]);
 
       setDataset({
-        medicines: extractArray(medicines, demoMedicines),
-        pharmacies: extractArray(pharmacies, demoPharmacies),
-        notifications: extractArray(notifications, demoNotifications),
+        medicines: extractArray(medicines),
+        pharmacies: extractArray(pharmacies),
+        notifications: extractArray(notifications),
       });
+      setError('');
       setLastUpdated(new Date().toISOString());
-    } catch (_error) {
-      setDataset({ medicines: demoMedicines, pharmacies: demoPharmacies, notifications: demoNotifications });
-      setLastUpdated(new Date().toISOString());
+    } catch (loadError) {
+      setDataset({ medicines: [], pharmacies: [], notifications: [] });
+      setError(loadError?.message || t('dashboard.loadError'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
 
@@ -101,16 +126,16 @@ export default function DashboardPage() {
     const activePharmacies = dataset.pharmacies.filter((item) => item.status !== 'inactive').length;
     const pricedRows = dataset.medicines.filter((item) => getPrice(item) > 0);
     const averagePrice = pricedRows.length ? pricedRows.reduce((sum, item) => sum + getPrice(item), 0) / pricedRows.length : 0;
-    return { totalStock, lowStock, outOfStock, activePharmacies, averagePrice, aiScans: 15 };
+    return { totalStock, lowStock, outOfStock, activePharmacies, averagePrice };
   }, [dataset]);
 
   const categoryRows = useMemo(() => (
     Object.entries(dataset.medicines.reduce((map, item) => {
-      const key = getMedicineCategory(item);
+      const key = getMedicineCategory(item, t('dashboard.generalCategory'));
       map[key] = (map[key] || 0) + getQuantity(item);
       return map;
     }, {})).map(([label, value]) => ({ label, value }))
-  ), [dataset.medicines]);
+  ), [dataset.medicines, t]);
 
   const lowStockRows = useMemo(() => dataset.medicines.filter((item) => getQuantity(item) < 10).slice(0, 6), [dataset.medicines]);
 
@@ -120,7 +145,6 @@ export default function DashboardPage() {
     { to: '/pharmacies', label: t('nav.pharmacies'), desc: language === 'ar' ? 'إدارة الصيدليات والفروع' : 'Manage pharmacies and branches', icon: Building2, roles: ROLE_GROUPS.admin },
     { to: '/pharmacies/new', label: t('nav.addPharmacy'), desc: t('pages.addPharmacy.description'), icon: Building2, roles: ROLE_GROUPS.super },
     { to: '/notifications', label: t('nav.notifications'), desc: language === 'ar' ? 'فتح تنبيهات المخزون والنظام' : 'Open stock and system alerts', icon: Bell, roles: ROLE_GROUPS.notifications },
-    { to: '/prescriptions', label: t('actions.scanPrescription'), desc: t('pages.scanner.description'), icon: ScanLine, roles: ROLE_GROUPS.scanner },
     { to: '/low-stock', label: t('actions.viewLowStock'), desc: t('pages.lowStock.description'), icon: AlertTriangle, roles: ROLE_GROUPS.admin },
     { to: '/analytics', label: t('actions.openAnalytics'), desc: t('pages.analytics.description'), icon: BarChart3, roles: ROLE_GROUPS.admin },
   ].filter((item) => hasRole(session?.role, item.roles));
@@ -129,18 +153,14 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {session?.demoMode ? (
-        <div className="rounded-3xl border border-cyan-200 bg-cyan-50 p-4 text-sm font-medium text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-500/10 dark:text-cyan-200">
-          {t('app.demoMode')}: ADWETY is running with presentation-ready fallback data.
-        </div>
-      ) : null}
+      {error ? <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-200">{error}</div> : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <Link to="/medicines" className="block transition hover:-translate-y-1"><StatCard label={t('dashboard.totalStock')} value={metrics.totalStock} hint="Combined quantity" icon={PackageCheck} /></Link>
-        <Link to="/low-stock" className="block transition hover:-translate-y-1"><StatCard label={t('dashboard.lowStock')} value={metrics.lowStock} hint="Qty 1 - 9" icon={AlertTriangle} /></Link>
-        <Link to="/low-stock" className="block transition hover:-translate-y-1"><StatCard label={t('dashboard.outOfStock')} value={metrics.outOfStock} hint="Qty 0" icon={Pill} /></Link>
-        <Link to="/pharmacies" className="block transition hover:-translate-y-1"><StatCard label={t('dashboard.activePharmacies')} value={metrics.activePharmacies} hint="Active branches" icon={Building2} /></Link>
-        <Link to="/medicines" className="card block min-w-0 p-5 transition hover:-translate-y-1">
+        <Link to="/medicines" className="block h-full transition hover:-translate-y-1"><StatCard label={t('dashboard.totalStock')} value={metrics.totalStock} hint={t('dashboard.combinedQuantity')} icon={PackageCheck} /></Link>
+        <Link to="/low-stock" className="block h-full transition hover:-translate-y-1"><StatCard label={t('dashboard.lowStock')} value={metrics.lowStock} hint={t('dashboard.qtyRange')} icon={AlertTriangle} /></Link>
+        <Link to="/low-stock" className="block h-full transition hover:-translate-y-1"><StatCard label={t('dashboard.outOfStock')} value={metrics.outOfStock} hint={t('dashboard.qtyZero')} icon={Pill} /></Link>
+        <Link to="/pharmacies" className="block h-full transition hover:-translate-y-1"><StatCard label={t('dashboard.activePharmacies')} value={metrics.activePharmacies} hint={t('dashboard.activeBranches')} icon={Building2} /></Link>
+        <Link to="/medicines" className="card block h-full min-h-[9.75rem] min-w-0 p-5 transition hover:-translate-y-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <p className="line-clamp-2 text-sm font-medium leading-5 text-muted">{t('dashboard.averagePrice')}</p>
@@ -155,20 +175,20 @@ export default function DashboardPage() {
               <Wallet className="h-5 w-5" />
             </span>
           </div>
-          <p className="mt-3 truncate text-xs text-soft">{language === 'ar' ? 'متوسط الكتالوج' : 'Catalog average'}</p>
+          <p className="mt-3 truncate text-xs text-soft">{t('dashboard.catalogAverage')}</p>
         </Link>
-        <Link to="/prescriptions" className="block transition hover:-translate-y-1"><StatCard label={t('dashboard.aiScans')} value={metrics.aiScans} hint="Scanner activity" icon={ScanLine} /></Link>
+        <Link to="/business-reports" className="block h-full transition hover:-translate-y-1"><StatCard label={t('dashboard.businessReports')} value={categoryRows.length} hint={t('dashboard.reportsCenter')} icon={BarChart3} /></Link>
       </section>
 
       <section className="card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-xl font-semibold text-primary">{t('dashboard.quickActions')}</h3>
-            {lastUpdated ? <p className="mt-1 text-xs text-soft">{language === 'ar' ? 'آخر تحديث' : 'Last updated'}: {new Date(lastUpdated).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en-EG')}</p> : null}
+            {lastUpdated ? <p className="mt-1 text-xs text-soft">{t('dashboard.lastUpdated')}: {new Date(lastUpdated).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en-EG')}</p> : null}
           </div>
           <button type="button" onClick={() => loadDashboardData(true)} disabled={refreshing} className="btn-secondary gap-2">
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {language === 'ar' ? 'تحديث البيانات' : 'Refresh data'}
+            {t('dashboard.refreshData')}
           </button>
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -193,17 +213,18 @@ export default function DashboardPage() {
         <Link to="/notifications" className="card block p-6 transition hover:-translate-y-1">
           <h3 className="text-xl font-semibold text-primary">{t('dashboard.recentNotifications')}</h3>
           <div className="mt-5 space-y-3">
-            {dataset.notifications.length ? dataset.notifications.slice(0, 4).map((notification) => (
-              <div key={notification.id || notification._id || notification.title} className="sub-card p-4">
+            {dataset.notifications.length ? dataset.notifications.slice(0, 4).map((notification) => {
+              const display = localizedNotification(notification, t);
+              return <div key={notification.id || notification._id || notification.title} className="sub-card p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-medium text-primary">{notification.title}</p>
+                  <p className="font-medium text-primary">{display.title}</p>
                   <span className="badge border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
                     {notification.is_read || notification.read ? t('common.read') : t('common.unread')}
                   </span>
                 </div>
-                <p className="mt-2 text-sm text-muted">{notification.message}</p>
-              </div>
-            )) : <EmptyState title={t('common.noData')} />}
+                <p className="mt-2 text-sm text-muted">{display.message}</p>
+              </div>;
+            }) : <EmptyState title={t('common.noData')} />}
           </div>
         </Link>
       </section>
@@ -221,8 +242,8 @@ export default function DashboardPage() {
                 {lowStockRows.length ? lowStockRows.map((item) => {
                   const quantity = getQuantity(item);
                   return (
-                    <tr key={item.inventory_id || item.id || item._id || getMedicineName(item)} className="border-b border-soft transition hover:bg-cyan-50 dark:hover:bg-white/5">
-                      <td className="px-5 py-4 font-medium text-primary"><Link to="/medicines">{getMedicineName(item)}</Link></td>
+                    <tr key={item.inventory_id || item.id || item._id || getMedicineName(item, t('dashboard.unknownMedicine'))} className="border-b border-soft transition hover:bg-cyan-50 dark:hover:bg-white/5">
+                      <td className="px-5 py-4 font-medium text-primary"><Link to="/medicines">{getMedicineName(item, t('dashboard.unknownMedicine'))}</Link></td>
                       <td className="px-5 py-4 text-muted">{getPharmacyName(item)}</td>
                       <td className="px-5 py-4 text-muted">{quantity}</td>
                       <td className="px-5 py-4"><span className={`badge ${stockTone(quantity)}`}>{t(`stock.${stockStatus(quantity)}`)}</span></td>
@@ -233,15 +254,16 @@ export default function DashboardPage() {
             </table>
           </div>
         </div>
-        <Link to="/prescriptions" className="card block p-6 transition hover:-translate-y-1">
-          <h3 className="text-xl font-semibold text-primary">{t('dashboard.aiSummary')}</h3>
+        <Link to="/business-reports" className="card block p-6 transition hover:-translate-y-1">
+          <h3 className="text-xl font-semibold text-primary">{t('dashboard.reportsSummary')}</h3>
           <div className="mt-5 space-y-3">
-            {demoScanTrend.slice(-4).map((row) => (
+            {categoryRows.slice(0, 4).map((row) => (
               <div key={row.label} className="sub-card flex items-center justify-between p-4">
                 <span className="font-medium text-primary">{row.label}</span>
-                <span className="text-sm text-muted">{row.scans} scans</span>
+                <span className="text-sm text-muted">{row.value}</span>
               </div>
             ))}
+            {!categoryRows.length ? <EmptyState title={t('common.noData')} /> : null}
           </div>
         </Link>
       </section>

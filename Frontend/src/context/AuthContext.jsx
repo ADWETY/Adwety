@@ -1,25 +1,15 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { env } from '../config/env';
 import { normalizeRole } from '../lib/roles';
 import { getJson, postJson } from '../lib/api';
 import {
   clearAuthStorage,
   clearStoredSession,
   getStoredSession,
-  getStoredToken,
+  purgeLegacyTokenStorage,
   setStoredSession,
-  setStoredToken,
 } from '../lib/storage';
 
 const AuthContext = createContext(null);
-
-function inferFallbackRole(email, preferredRole) {
-  if (preferredRole) return normalizeRole(preferredRole);
-  if (email === env.demoUsers.super_admin.email) return 'super_admin';
-  if (email === env.demoUsers.pharmacy_admin.email) return 'pharmacy_admin';
-  if (email === env.demoUsers.support_admin.email) return 'support_admin';
-  return 'user';
-}
 
 function normalizeAuthPayload(result) {
   const data = result?.data || result || {};
@@ -37,37 +27,46 @@ function normalizeAuthPayload(result) {
     phone_number: data.phone_number || data.phoneNumber || user.phone_number || user.phoneNumber,
     email_verified: data.email_verified ?? data.emailVerified ?? user.email_verified ?? user.emailVerified,
     phone_verified: data.phone_verified ?? data.phoneVerified ?? user.phone_verified ?? user.phoneVerified,
-    token: data.token || data.accessToken || data.access_token || result?.token || getStoredToken() || null,
+    requires_otp: Boolean(data.requires_otp || data.mfa_required),
+    mfa_required: Boolean(data.mfa_required),
+    mfa_setup_required: Boolean(data.mfa_setup_required),
+    mfa_policy_version: Number(data.mfa_policy_version ?? data.mfaPolicyVersion ?? user.mfa_policy_version ?? user.mfaPolicyVersion ?? 1),
+    mfa_grandfathered: Boolean(data.mfa_grandfathered ?? data.mfaGrandfathered ?? user.mfa_grandfathered ?? user.mfaGrandfathered),
+    otp_token: data.otp_token || data.challenge_id || data.challengeId || null,
+    challenge_id: data.challenge_id || data.challengeId || data.otp_token || null,
+    expires_in_minutes: data.expires_in_minutes || (data.expires_in ? Math.max(1, Math.ceil(Number(data.expires_in) / 60)) : null),
+    setup_secret: data.setup_secret || null,
+    provisioning_uri: data.provisioning_uri || null,
+    password_policy_version: Number(data.password_policy_version ?? data.passwordPolicyVersion ?? user.password_policy_version ?? user.passwordPolicyVersion ?? 1),
+    password_upgrade_recommended: Boolean(data.password_upgrade_recommended ?? data.passwordUpgradeRecommended ?? user.password_upgrade_recommended ?? user.passwordUpgradeRecommended),
   };
 }
 
 function buildSession(payload, fallback = {}) {
-  const role = normalizeRole(payload.role || fallback.role || inferFallbackRole(payload.email || fallback.email, fallback.role));
-  const demoMode = Boolean(payload.demo_mode || fallback.demoMode);
+  const role = normalizeRole(payload.role || fallback.role);
+  if (!role) throw new Error('The server response does not contain a valid user role.');
 
-  if (!role && !demoMode) {
-    throw new Error('Invalid session payload from server.');
-  }
-
-  const accountType = payload.account_type || payload.accountType || (role === 'user' ? 'user' : 'admin');
-
+  const accountType = payload.account_type || payload.accountType || (role === 'patient' ? 'user' : 'admin');
   return {
-    id: payload.id || payload._id || (demoMode ? 'demo-user' : ''),
+    id: payload.id || payload._id || '',
     email: payload.email || fallback.email || '',
     name: payload.name || payload.fullName || payload.full_name || fallback.email || 'ADWETY User',
-    role: role || 'user',
+    role,
     accountType,
-    pharmacyName: role === 'pharmacy_admin' ? (payload.pharmacy_name || payload.pharmacyName || fallback.pharmacyName || '') : null,
-    demoMode,
-    token: payload.token || fallback.token || getStoredToken() || null,
+    pharmacyName: role === 'pharmacist' ? (payload.pharmacy_name || payload.pharmacyName || fallback.pharmacyName || '') : null,
+    demoMode: false,
     emailVerified: Boolean(payload.email_verified ?? payload.emailVerified),
     phoneNumber: payload.phone_number || payload.phoneNumber || fallback.phoneNumber || '',
     phoneVerified: Boolean(payload.phone_verified ?? payload.phoneVerified),
+    passwordPolicyVersion: Number(payload.password_policy_version ?? payload.passwordPolicyVersion ?? fallback.passwordPolicyVersion ?? 1),
+    passwordUpgradeRecommended: Boolean(payload.password_upgrade_recommended ?? payload.passwordUpgradeRecommended ?? fallback.passwordUpgradeRecommended),
+    mfaPolicyVersion: Number(payload.mfa_policy_version ?? payload.mfaPolicyVersion ?? fallback.mfaPolicyVersion ?? 1),
+    mfaGrandfathered: Boolean(payload.mfa_grandfathered ?? payload.mfaGrandfathered ?? fallback.mfaGrandfathered),
   };
 }
 
-function persistAuthenticatedSession(session) {
-  if (session?.token) setStoredToken(session.token);
+function persistAuthenticatedSession() {
+  purgeLegacyTokenStorage();
   setStoredSession({ authenticated: true });
 }
 
@@ -76,14 +75,23 @@ export function AuthProvider({ children }) {
   const [isBooting, setIsBooting] = useState(true);
 
   useEffect(() => {
+    const expire = () => {
+      setSession(null);
+      clearAuthStorage();
+    };
+    window.addEventListener('adwety:auth-expired', expire);
+    return () => window.removeEventListener('adwety:auth-expired', expire);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function hydrateSession() {
+      purgeLegacyTokenStorage();
+      // The HttpOnly cookies cannot be read by JavaScript. The server is the
+      // source of truth, so we safely ask /auth/me on every fresh app load.
+      getStoredSession();
       try {
-        const marker = getStoredSession();
-        const token = getStoredToken();
-        if (!marker && !token) return;
-
         const result = await getJson('/profile/me');
         if (cancelled) return;
 
@@ -91,11 +99,10 @@ export function AuthProvider({ children }) {
         const nextSession = buildSession(profile, {
           email: profile.email,
           role: profile.role,
-          token,
         });
 
         setSession(nextSession);
-        persistAuthenticatedSession(nextSession);
+        persistAuthenticatedSession();
       } catch (_error) {
         if (!cancelled) {
           setSession(null);
@@ -115,43 +122,24 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(session),
     isBooting,
     async login({ email, password, role }) {
-      try {
-        const result = await postJson('/auth/login', { email, password });
-        const payload = normalizeAuthPayload(result);
+      const result = await postJson('/auth/login', { email, password });
+      const payload = normalizeAuthPayload(result);
 
-        if (payload.requires_otp) {
-          return { ...payload, email, role };
-        }
-
-        const nextSession = buildSession(payload, { email, role, token: payload.token });
-        setSession(nextSession);
-        persistAuthenticatedSession(nextSession);
-        return nextSession;
-      } catch (backendError) {
-        if (!env.enableDemoAuth || env.isProduction) throw backendError;
-
-        const preset = env.demoUsers[role];
-        if (!preset || !preset.password) throw backendError;
-        if (email !== preset.email || password !== preset.password) throw backendError;
-
-        const nextSession = buildSession({
-          email: preset.email,
-          name: preset.name,
-          role,
-          demo_mode: true,
-          token: null,
-        }, { email: preset.email, role, demoMode: true, pharmacyName: preset.pharmacyName });
-        setSession(nextSession);
-        setStoredSession({ authenticated: true });
-        return nextSession;
+      if (payload.requires_otp || payload.mfa_required) {
+        return { ...payload, requires_otp: true, email, role };
       }
+
+      const nextSession = buildSession(payload, { email });
+      setSession(nextSession);
+      persistAuthenticatedSession();
+      return nextSession;
     },
     async verifyLoginOtp({ otpToken, otp, email, role }) {
       const result = await postJson('/auth/login/verify-otp', { otp_token: otpToken, otp });
       const payload = normalizeAuthPayload(result);
-      const nextSession = buildSession(payload, { email, role, token: payload.token });
+      const nextSession = buildSession(payload, { email, role });
       setSession(nextSession);
-      persistAuthenticatedSession(nextSession);
+      persistAuthenticatedSession();
       return nextSession;
     },
     async register({ fullName, email, password, phoneNumber }) {
@@ -165,18 +153,18 @@ export function AuthProvider({ children }) {
         phoneNumber,
       });
       const payload = normalizeAuthPayload(result);
-      if (payload.requires_otp || payload.queued) return { ...payload, email, role: 'user' };
-      const nextSession = buildSession(payload, { email, role: 'user', token: payload.token });
+      if (payload.requires_otp || payload.queued) return { ...payload, email, role: 'patient' };
+      const nextSession = buildSession(payload, { email, role: 'patient' });
       setSession(nextSession);
-      persistAuthenticatedSession(nextSession);
+      persistAuthenticatedSession();
       return nextSession;
     },
     async verifyRegisterOtp({ otpToken, otp, email }) {
       const result = await postJson('/auth/register/verify-otp', { otp_token: otpToken, otp });
       const payload = normalizeAuthPayload(result);
-      const nextSession = buildSession(payload, { email, role: 'user', token: payload.token });
+      const nextSession = buildSession(payload, { email, role: 'patient' });
       setSession(nextSession);
-      persistAuthenticatedSession(nextSession);
+      persistAuthenticatedSession();
       return nextSession;
     },
     async requestPasswordReset({ email }) {
@@ -206,13 +194,17 @@ export function AuthProvider({ children }) {
         phoneNumber: profile.phone_number || profile.phoneNumber || session.phoneNumber || '',
         emailVerified: Boolean(profile.email_verified ?? profile.emailVerified),
         phoneVerified: Boolean(profile.phone_verified ?? profile.phoneVerified),
+        passwordPolicyVersion: Number(profile.password_policy_version ?? profile.passwordPolicyVersion ?? session.passwordPolicyVersion ?? 1),
+        passwordUpgradeRecommended: Boolean(profile.password_upgrade_recommended ?? profile.passwordUpgradeRecommended ?? session.passwordUpgradeRecommended),
+        mfaPolicyVersion: Number(profile.mfa_policy_version ?? profile.mfaPolicyVersion ?? session.mfaPolicyVersion ?? 1),
+        mfaGrandfathered: Boolean(profile.mfa_grandfathered ?? profile.mfaGrandfathered ?? session.mfaGrandfathered),
       };
       setSession(nextSession);
-      persistAuthenticatedSession(nextSession);
+      persistAuthenticatedSession();
       return nextSession;
     },
-    logout() {
-      postJson('/auth/logout', {}).catch(() => {});
+    async logout() {
+      try { await postJson('/auth/logout', {}); } catch (_error) {}
       setSession(null);
       clearAuthStorage();
       clearStoredSession();
@@ -224,8 +216,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const value = useContext(AuthContext);
-  if (!value) {
-    throw new Error('useAuth must be used inside AuthProvider');
-  }
+  if (!value) throw new Error('useAuth must be used inside AuthProvider');
   return value;
 }

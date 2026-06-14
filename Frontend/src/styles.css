@@ -159,3 +159,60 @@ body {
   .btn-primary, .btn-secondary, .btn-danger { width: 100%; }
   table { min-width: 760px; }
 }
+
+/* Final MATGR tweaks: no horizontal scroll, compact icon actions */
+.table-responsive {
+  width: 100%;
+  overflow-x: visible;
+}
+
+.responsive-table {
+  width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+}
+
+.responsive-table th,
+.responsive-table td {
+  white-space: normal;
+  word-break: break-word;
+  vertical-align: middle;
+}
+
+.btn-icon,
+.btn-icon-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.9rem;
+  transition: 0.2s ease;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.btn-icon:hover {
+  background: var(--surface-muted);
+  color: var(--primary);
+}
+
+.btn-icon-danger {
+  border-color: rgba(244, 63, 94, 0.35);
+  background: rgba(255, 241, 242, 0.92);
+  color: #be123c;
+}
+
+.dark .btn-icon-danger {
+  background: rgba(244, 63, 94, 0.12);
+  color: #fda4af;
+}
+
+.btn-icon-danger:hover {
+  background: rgba(244, 63, 94, 0.18);
+}
+
+@media (max-width: 640px) {
+  table.responsive-table { min-width: 0 !important; }
+}

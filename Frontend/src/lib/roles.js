@@ -1,19 +1,20 @@
 export const ROLE_GROUPS = {
-  super: ['owner', 'super_admin', 'admin'],
-  admin: ['owner', 'super_admin', 'admin', 'pharmacy_admin'],
-  support: ['owner', 'super_admin', 'admin', 'support_admin'],
-  scanner: ['owner', 'super_admin', 'admin', 'pharmacy_admin', 'user', 'patient'],
-  dashboard: ['owner', 'super_admin', 'admin', 'pharmacy_admin', 'support_admin'],
-  medicine: ['owner', 'super_admin', 'admin', 'pharmacy_admin', 'user', 'patient'],
-  notifications: ['owner', 'super_admin', 'admin', 'pharmacy_admin', 'support_admin', 'user', 'patient'],
-  settings: ['owner', 'super_admin', 'admin', 'pharmacy_admin', 'support_admin', 'user', 'patient'],
+  super: ['admin'],
+  admin: ['admin'],
+  support: ['admin'],
+  scanner: ['admin', 'pharmacist', 'patient'],
+  dashboard: ['admin'],
+  medicine: ['admin'],
+  notifications: ['admin', 'pharmacist', 'patient'],
+  settings: ['admin', 'pharmacist', 'patient'],
 };
 
 export function normalizeRole(role) {
   const value = String(role || '').trim().toLowerCase();
   if (!value) return '';
-  if (['patient', 'customer', 'client'].includes(value)) return 'user';
-  if (['dashboard_admin', 'admin_user'].includes(value)) return 'admin';
+  if (['owner', 'super_admin', 'support_admin', 'dashboard_admin', 'admin_user'].includes(value)) return 'admin';
+  if (['pharmacy_admin', 'pharmacy_owner'].includes(value)) return 'pharmacist';
+  if (['user', 'customer', 'client'].includes(value)) return 'patient';
   return value;
 }
 

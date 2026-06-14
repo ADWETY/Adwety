@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Building2, ClipboardList, Headphones, Home, LogOut, PackageX, Pill, PlusCircle, ScanSearch, Settings, Users } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, FileText, Headphones, Home, LogOut, PackagePlus, PackageX, Pill, PlusCircle, Receipt, RotateCcw, Settings, ScanLine, ShoppingCart, Tags, Truck, Users, UsersRound, WalletCards, Warehouse } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import RoleBadge from './RoleBadge';
 import { useAuth } from '../context/AuthContext';
@@ -7,32 +7,46 @@ import { cn } from '../lib/utils';
 import { ROLE_GROUPS, hasRole } from '../lib/roles';
 
 const items = [
-  { to: '/', labelKey: 'nav.dashboard', icon: Home, roles: ROLE_GROUPS.dashboard },
-  { to: '/medicines', labelKey: 'nav.medicines', icon: Pill, roles: ROLE_GROUPS.medicine },
-  { to: '/medicines/new', labelKey: 'nav.addMedicine', icon: PlusCircle, roles: ROLE_GROUPS.admin },
-  { to: '/low-stock', labelKey: 'nav.lowStock', icon: PackageX, roles: ROLE_GROUPS.admin },
-  { to: '/pharmacies', labelKey: 'nav.pharmacies', icon: Building2, roles: ROLE_GROUPS.admin },
-  { to: '/pharmacies/new', labelKey: 'nav.addPharmacy', icon: PlusCircle, roles: ROLE_GROUPS.super },
-  { to: '/analytics', labelKey: 'nav.analytics', icon: BarChart3, roles: ROLE_GROUPS.admin },
-  { to: '/prescriptions', labelKey: 'nav.prescriptionScanner', icon: ScanSearch, roles: ROLE_GROUPS.scanner },
-  { to: '/notifications', labelKey: 'nav.notifications', icon: Bell, roles: ROLE_GROUPS.notifications },
-  { to: '/pharmacy-requests', labelKey: 'nav.pharmacyRequests', icon: ClipboardList, roles: ROLE_GROUPS.super },
-  { to: '/support-tickets', labelKey: 'nav.supportTickets', icon: Headphones, roles: ROLE_GROUPS.support },
-  { to: '/users', labelKey: 'nav.users', icon: Users, roles: ROLE_GROUPS.super },
-  { to: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ROLE_GROUPS.settings },
+  { to: '/', labelKey: 'nav.dashboard', label: 'Dashboard', icon: Home, roles: ROLE_GROUPS.dashboard },
+  { to: '/retail-dashboard', labelKey: 'nav.retailDashboard', label: 'Retail Dashboard', icon: BarChart3, roles: ROLE_GROUPS.admin },
+  { to: '/pos', labelKey: 'nav.pos', label: 'POS Sales', icon: ShoppingCart, roles: ROLE_GROUPS.admin },
+  { to: '/sales-invoices', labelKey: 'nav.salesInvoices', label: 'Invoices', icon: FileText, roles: ROLE_GROUPS.admin },
+  { to: '/purchases', labelKey: 'nav.purchases', label: 'Purchases', icon: PackagePlus, roles: ROLE_GROUPS.admin },
+  { to: '/returns', labelKey: 'nav.returns', label: 'Returns', icon: RotateCcw, roles: ROLE_GROUPS.admin },
+  { to: '/products', labelKey: 'nav.products', label: 'Products', icon: Boxes, roles: ROLE_GROUPS.admin },
+  { to: '/categories', labelKey: 'nav.categories', label: 'Categories', icon: Tags, roles: ROLE_GROUPS.admin },
+  { to: '/warehouses', labelKey: 'nav.warehouses', label: 'Warehouses', icon: Warehouse, roles: ROLE_GROUPS.admin },
+  { to: '/transfers', labelKey: 'nav.transfers', label: 'Transfers', icon: ArrowLeftRight, roles: ROLE_GROUPS.admin },
+  { to: '/inventory-count', labelKey: 'nav.inventoryCount', label: 'Stocktake', icon: ClipboardCheck, roles: ROLE_GROUPS.admin },
+  { to: '/customers', labelKey: 'nav.customers', label: 'Customers', icon: UsersRound, roles: ROLE_GROUPS.admin },
+  { to: '/suppliers', labelKey: 'nav.suppliers', label: 'Suppliers', icon: Truck, roles: ROLE_GROUPS.admin },
+  { to: '/treasury', labelKey: 'nav.treasury', label: 'Treasury', icon: WalletCards, roles: ROLE_GROUPS.admin },
+  { to: '/business-reports', labelKey: 'nav.businessReports', label: 'Business Reports', icon: Receipt, roles: ROLE_GROUPS.admin },
+  { to: '/medicines', labelKey: 'nav.medicines', label: 'Medicines', icon: Pill, roles: ROLE_GROUPS.medicine },
+  { to: '/medicines/new', labelKey: 'nav.addMedicine', label: 'Add Medicine', icon: PlusCircle, roles: ROLE_GROUPS.admin },
+  { to: '/low-stock', labelKey: 'nav.lowStock', label: 'Low Stock', icon: PackageX, roles: ROLE_GROUPS.admin },
+  { to: '/pharmacies', labelKey: 'nav.pharmacies', label: 'Pharmacies', icon: Building2, roles: ROLE_GROUPS.admin },
+  { to: '/pharmacies/new', labelKey: 'nav.addPharmacy', label: 'Add Pharmacy', icon: PlusCircle, roles: ROLE_GROUPS.super },
+  { to: '/analytics', labelKey: 'nav.analytics', label: 'Analytics', icon: BarChart3, roles: ROLE_GROUPS.admin },
+  { to: '/scanner', labelKey: 'nav.prescriptionScanner', label: 'Prescription Scanner', icon: ScanLine, roles: ROLE_GROUPS.scanner },
+  { to: '/notifications', labelKey: 'nav.notifications', label: 'Notifications', icon: Bell, roles: ROLE_GROUPS.notifications },
+  { to: '/pharmacy-requests', labelKey: 'nav.pharmacyRequests', label: 'Pharmacy Requests', icon: ClipboardList, roles: ROLE_GROUPS.super },
+  { to: '/support-tickets', labelKey: 'nav.supportTickets', label: 'Support Tickets', icon: Headphones, roles: ROLE_GROUPS.support },
+  { to: '/users', labelKey: 'nav.users', label: 'Users', icon: Users, roles: ROLE_GROUPS.super },
+  { to: '/settings', labelKey: 'nav.settings', label: 'Settings', icon: Settings, roles: ROLE_GROUPS.settings },
 ];
 
 export default function Sidebar({ mobile = false }) {
   const { session, logout } = useAuth();
-  const { t, isRtl } = usePreferences();
+  const { t, isRtl, language } = usePreferences();
   const visibleItems = items.filter((item) => hasRole(session?.role, item.roles));
 
   return (
     <aside className={cn('card h-[calc(100vh-3rem)] w-72 shrink-0 flex-col p-5', mobile ? 'flex' : 'sticky top-6 hidden lg:flex')}>
       <div className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 dark:border-cyan-400/20 dark:bg-cyan-500/10">
-        <p className="text-xs uppercase tracking-[0.25em] text-cyan-700 dark:text-cyan-200/80">ADWETY</p>
+        <p className="text-xs uppercase tracking-[0.25em] text-cyan-700 dark:text-cyan-200/80">BAHAMAS / MATGR</p>
         <h1 className="mt-2 text-2xl font-semibold text-primary">{t('app.controlCenter')}</h1>
-        <p className="mt-2 text-sm text-muted">{t('app.subtitle')}</p>
+        <p className="mt-2 text-sm text-muted">{t('app.sidebarSubtitle')}</p>
       </div>
 
       <div className="mt-5 sub-card p-4">
@@ -40,7 +54,6 @@ export default function Sidebar({ mobile = false }) {
         <p className="mt-1 text-xs text-muted">{session?.email}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <RoleBadge role={session?.role} />
-          {session?.demoMode ? <span className="badge border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-400/30 dark:bg-cyan-500/10 dark:text-cyan-200">{t('app.demoMode')}</span> : null}
         </div>
       </div>
 
@@ -54,7 +67,7 @@ export default function Sidebar({ mobile = false }) {
               className={({ isActive }) => cn('flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition', isRtl && 'flex-row-reverse text-right', isActive ? 'bg-cyan-600 text-white shadow-sm dark:bg-white dark:text-slate-950' : 'text-muted hover:bg-cyan-50 hover:text-cyan-700 dark:hover:bg-white/5 dark:hover:text-white')}
             >
               <Icon className="h-4 w-4" />
-              <span className="flex-1">{t(item.labelKey)}</span>
+              <span className="flex-1">{t(item.labelKey, item.label)}</span>
             </NavLink>
           );
         })}

@@ -23,9 +23,9 @@ export default function ForgotPasswordPage() {
     setMessage('');
     setError('');
     try {
-      await requestPasswordReset({ email });
-      setOtpState({ email, expires_in_minutes: 10 });
-      setMessage(t('otp.ifExists'));
+      const resetInfo = await requestPasswordReset({ email });
+      setOtpState({ email, expires_in_minutes: resetInfo.expires_in_minutes || 10, otp_token: resetInfo.otp_token, otp_code: resetInfo.otp_code });
+      setMessage(resetInfo.otp_code ? `${t('otp.ifExists')} Dev OTP: ${resetInfo.otp_code}` : t('otp.ifExists'));
     } catch (submitError) {
       setError(submitError.message);
     } finally {

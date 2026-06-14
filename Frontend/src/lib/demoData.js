@@ -16,7 +16,6 @@ export const demoMedicines = [
 
 export const demoNotifications = [
   { id: 'n-1', type: 'stock', title: 'Low stock alert', message: 'Amoxicillin is low in BlueCare Pharmacy. Qty: 6', is_read: false, created_at: '2026-04-29T10:00:00.000Z' },
-  { id: 'n-2', type: 'prescription', title: 'Prescription processed', message: '3 medicines extracted successfully with high confidence.', is_read: false, created_at: '2026-04-29T09:15:00.000Z' },
   { id: 'n-3', type: 'system', title: 'System update', message: 'Dashboard analytics cache refreshed.', is_read: true, created_at: '2026-04-28T20:00:00.000Z' },
   { id: 'n-4', type: 'stock', title: 'Out of stock', message: 'Glucophage is out of stock in Teal Health Pharmacy.', is_read: false, created_at: '2026-04-28T12:30:00.000Z' },
 ];
@@ -33,7 +32,7 @@ export const demoRequests = [
 
 export const demoTickets = [
   { id: 't-1', title: 'Cannot update medicine price', user: 'BlueCare Manager', pharmacy: 'BlueCare Pharmacy', priority: 'high', status: 'open', created_at: '2026-04-29T11:00:00.000Z', assigned_admin: 'Unassigned', message: 'The pharmacy admin cannot update Panadol Extra price from the inventory table.' },
-  { id: 't-2', title: 'Scanner confidence is low', user: 'Teal Manager', pharmacy: 'Teal Health Pharmacy', priority: 'medium', status: 'in_progress', created_at: '2026-04-28T16:00:00.000Z', assigned_admin: 'Support Admin', message: 'Several handwritten prescriptions return low confidence.' },
+  { id: 't-2', title: 'Report export issue', user: 'Teal Manager', pharmacy: 'Teal Health Pharmacy', priority: 'medium', status: 'in_progress', created_at: '2026-04-28T16:00:00.000Z', assigned_admin: 'Support Admin', message: 'The store manager needs a cleaner exported report layout for review.' },
   { id: 't-3', title: 'Need pharmacy activation', user: 'Nova Owner', pharmacy: 'Nova Pharmacy', priority: 'urgent', status: 'resolved', created_at: '2026-04-27T13:00:00.000Z', assigned_admin: 'Super Admin', message: 'Activation was completed after document review.' },
 ];
 

@@ -71,7 +71,21 @@ export default function PrescriptionScannerPage() {
     }
   }
 
-  const extractedDrugs = scanResult?.extracted_drugs || [];
+  const extractedDrugs = (scanResult?.extracted_drugs || scanResult?.drugs || []).map((item, index) => {
+    const matched = item.matched_drug || null;
+    return {
+      ...item,
+      id: item.id || `${index}-${item.extracted_name || item.name || 'drug'}`,
+      extracted_name: item.extracted_name || item.name || '',
+      confidence_score: Number(item.confidence_score ?? item.confidence ?? 0),
+      matched_drug: matched ? {
+        ...matched,
+        name: matched.name || matched.genericName || matched.generic_name || item.matched_drug_name || '',
+        form: matched.form || matched.dosageForm || matched.dosage_form || '',
+        pharmacies: matched.pharmacies || []
+      } : null
+    };
+  });
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -90,10 +104,10 @@ export default function PrescriptionScannerPage() {
                 <FileImage className="h-5 w-5 text-cyan-500" />
                 <div>
                   <p className="font-medium text-primary">{file.name}</p>
-                  <p className="text-xs text-muted">{Math.round(file.size / 1024)} KB</p>
+                  <p className="text-xs text-muted">{Math.round(file.size / 1024)} {t('common.kilobytesShort')}</p>
                 </div>
               </div>
-              {previewUrl ? <img src={previewUrl} alt="preview" className="mt-4 max-h-56 w-full rounded-2xl object-cover" /> : null}
+              {previewUrl ? <img src={previewUrl} alt={t('scanner.previewAlt')} className="mt-4 max-h-56 w-full rounded-2xl object-cover" /> : null}
             </div>
           ) : null}
 
@@ -136,7 +150,7 @@ export default function PrescriptionScannerPage() {
             <div>
               <h3 className="text-xl font-semibold text-primary">{t('scanner.extractedText')}</h3>
               <div className="mt-3 min-h-24 whitespace-pre-wrap sub-card p-4 text-sm text-muted">
-                {scanResult.extracted_text || 'No readable prescription text was returned.'}
+                {scanResult.extracted_text || t('scanner.noReadableText')}
               </div>
             </div>
 
@@ -144,7 +158,7 @@ export default function PrescriptionScannerPage() {
               <h3 className="text-xl font-semibold text-primary">{t('scanner.matchedMedicines')}</h3>
               {!extractedDrugs.length ? (
                 <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100">
-                  No medicine names were confidently extracted from this prescription.
+                  {t('scanner.noMedicinesExtracted')}
                 </div>
               ) : (
                 <div className="mt-4 space-y-4">
@@ -164,7 +178,7 @@ export default function PrescriptionScannerPage() {
                         <div className="mt-3 flex items-center gap-2 text-sm">
                           {matched ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <XCircle className="h-4 w-4 text-rose-500" />}
                           <span className="text-muted">{matched ? t('scanner.matched') : t('scanner.notMatched')}</span>
-                          {item.match_score ? <span className="text-xs text-muted">Match {Math.round(item.match_score * 100)}%</span> : null}
+                          {item.match_score ? <span className="text-xs text-muted">{t('scanner.matchScore')} {Math.round(item.match_score * 100)}%</span> : null}
                         </div>
                         {pharmacies.length ? (
                           <div className="mt-4 space-y-2">
@@ -172,7 +186,7 @@ export default function PrescriptionScannerPage() {
                               <div key={pharmacy.inventory_id || pharmacy.id} className="rounded-2xl border border-soft p-3 text-sm">
                                 <div className="flex justify-between gap-3">
                                   <span className="font-medium text-primary">{pharmacy.name}</span>
-                                  <span className="text-muted">{formatCurrency(pharmacy.price, language)} · Qty {pharmacy.quantity}</span>
+                                  <span className="text-muted">{formatCurrency(pharmacy.price, language)} · {t('common.quantityShort')} {pharmacy.quantity}</span>
                                 </div>
                                 {pharmacy.address ? <p className="mt-1 text-xs text-muted">{pharmacy.address}</p> : null}
                               </div>

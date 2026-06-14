@@ -1,13 +1,13 @@
 import { env } from '../config/env';
-import { getStoredToken } from './storage';
 
 function getCookie(name) {
   const prefix = `${name}=`;
-  return document.cookie
+  const value = document.cookie
     .split(';')
     .map((item) => item.trim())
     .find((item) => item.startsWith(prefix))
     ?.slice(prefix.length) || '';
+  try { return decodeURIComponent(value); } catch (_error) { return value; }
 }
 
 function getCsrfToken() {
@@ -34,41 +34,63 @@ function mapDashboardPath(path, method) {
   const { pathname, query } = splitPath(path);
   const upper = String(method || 'GET').toUpperCase();
 
-  // The dashboard is an admin web app. Use the stable /api/admin routes
-  // so the frontend does not hit legacy/mobile aliases that may not exist.
+  const retailPrefixes = [
+    '/retail-dashboard', '/retail/overview', '/overview', '/business-reports', '/reports',
+    '/products', '/categories', '/warehouses', '/customers', '/suppliers', '/pos',
+    '/sales-invoices', '/purchases', '/invoices', '/returns', '/transfers',
+    '/inventory-count', '/inventory-counts', '/treasury'
+  ];
+  if (retailPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+    return `/admin${pathname}${query}`;
+  }
+
   if (upper === 'GET') {
     if (pathname === '/profile' || pathname === '/profile/me') return '/auth/me';
     if (pathname === '/auth/profile' || pathname === '/auth/me') return '/auth/me';
     if (pathname === '/analytics') return withQuery('/admin/analytics', query);
     if (pathname === '/medicines') return withQuery('/admin/inventory', query, '?limit=100');
     if (pathname === '/drugs') return withQuery('/admin/drugs', query, '?limit=100');
-    if (pathname === '/notifications') return withQuery('/admin/logs', query, query ? '' : '?limit=20');
+    if (pathname === '/notifications') return withQuery('/notifications', query, query ? '' : '?limit=50');
+    if (pathname === '/users') return withQuery('/admin/users', query, '?limit=100');
+    if (pathname === '/support-tickets') return withQuery('/support-tickets', query, '?limit=100');
+    if (pathname === '/approval-requests' || pathname === '/pharmacy-requests') return withQuery('/admin/pharmacy-requests', query, query ? '' : '?status=pending');
     if (pathname === '/pharmacies') return withQuery('/admin/pharmacies', query, '?limit=100');
     if (pathname.startsWith('/pharmacies/')) return `/admin${pathname}${query}`;
     if (pathname.startsWith('/medicines/')) return `/admin/drugs/${pathname.split('/').pop()}${query}`;
   }
 
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(upper)) {
+    if (pathname === '/users') return '/admin/users';
+    if (pathname.startsWith('/users/')) return `/admin${pathname}${query}`;
+    if (pathname === '/support-tickets') return '/support-tickets';
+    if (pathname.startsWith('/support-tickets/')) return `${pathname}${query}`;
+    if (pathname === '/approval-requests' || pathname === '/pharmacy-requests') return '/admin/pharmacy-requests';
+    if (pathname.startsWith('/approval-requests/')) return `/admin/pharmacy-requests/${pathname.slice('/approval-requests/'.length)}${query}`;
+    if (pathname.startsWith('/pharmacy-requests/')) return `/admin${pathname}${query}`;
     if (pathname === '/pharmacies') return '/admin/pharmacies';
     if (pathname.startsWith('/pharmacies/')) return `/admin${pathname}${query}`;
     if (pathname === '/analytics') return withQuery('/admin/analytics', query);
-    if (pathname === '/prescriptions/scan') return '/ai/prescription';
   }
 
   return path;
 }
 
-async function rawApiRequest(path, options = {}) {
+function shouldAttemptRefresh(path) {
+  const pathname = splitPath(path).pathname;
+  if (pathname === '/auth/me' || pathname === '/profile/me' || pathname === '/profile') return true;
+  return !pathname.startsWith('/auth/');
+}
+
+function notifyAuthExpired() {
+  window.dispatchEvent(new CustomEvent('adwety:auth-expired'));
+}
+
+async function performFetch(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
   const headers = {
     Accept: 'application/json',
     ...normalizeHeaders(options.headers),
   };
-
-  const token = getStoredToken();
-  if (token && !headers.Authorization && !headers.authorization) {
-    headers.Authorization = `Bearer ${token}`;
-  }
 
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
     const csrfToken = getCsrfToken();
@@ -82,8 +104,41 @@ async function rawApiRequest(path, options = {}) {
     credentials: 'include',
     headers,
   });
-
   const data = await response.json().catch(() => ({}));
+  return { response, data };
+}
+
+let refreshPromise = null;
+async function refreshBrowserSession() {
+  if (!refreshPromise) {
+    refreshPromise = performFetch('/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }).then(({ response, data }) => {
+      if (!response.ok || data.success === false) {
+        const error = new Error(data.message || 'Session refresh failed');
+        error.status = response.status;
+        error.payload = data;
+        throw error;
+      }
+      return data;
+    }).finally(() => { refreshPromise = null; });
+  }
+  return refreshPromise;
+}
+
+async function rawApiRequest(path, options = {}, state = {}) {
+  const { response, data } = await performFetch(path, options);
+
+  if (response.status === 401 && !state.retried && shouldAttemptRefresh(path)) {
+    try {
+      await refreshBrowserSession();
+      return rawApiRequest(path, options, { retried: true });
+    } catch (_refreshError) {
+      notifyAuthExpired();
+    }
+  }
 
   if (!response.ok || data.success === false) {
     const error = new Error(data.message || `Request failed with status ${response.status}`);
@@ -202,14 +257,12 @@ export function normalizeMedicine(item = {}) {
 
 export function normalizeNotification(item = {}) {
   const isRead = Boolean(item.is_read ?? item.isRead ?? item.read);
-  const type = String(item.type || item.status || 'system').includes('stock') ? 'stock'
-    : String(item.type || item.status || '').includes('ai') || String(item.action || '').includes('ai') ? 'prescription'
-    : 'system';
+  const type = String(item.type || item.status || 'system').includes('stock') ? 'stock' : 'system';
   return {
     ...item,
     id: idOf(item.id || item._id),
     type,
-    title: valueOf(item.title, item.action, item.status, type === 'stock' ? 'Stock alert' : type === 'prescription' ? 'Prescription activity' : 'System log'),
+    title: valueOf(item.title, item.action, item.status, type === 'stock' ? 'Stock alert' : 'System log'),
     message: valueOf(item.message, item.errorMessage, item.extractedText, item.action, 'System activity'),
     is_read: isRead,
     isRead,
@@ -289,7 +342,27 @@ export function getJson(path) {
   return apiRequest(path, { method: 'GET' });
 }
 
+export function pharmacyPayload(body = {}) {
+  return {
+    name: String(body.name || '').trim(),
+    address: String(body.address || '').trim(),
+    phone: String(body.phone || '').trim(),
+    email: String(body.email || '').trim(),
+    status: body.status || 'active',
+    latitude: Number(body.latitude ?? body.lat),
+    longitude: Number(body.longitude ?? body.lng),
+    workingHours: body.workingHours ?? body.working_hours ?? '',
+    rating: Number(body.rating || 0),
+    googleMapsUrl: body.googleMapsUrl ?? body.google_maps_url ?? '',
+    ...(body.ownerId || body.owner_id ? { ownerId: body.ownerId || body.owner_id } : {}),
+  };
+}
+
 export async function postJson(path, body) {
+  if (path === '/pharmacies') {
+    return apiRequest(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pharmacyPayload(body)) });
+  }
+
   if (path === '/medicines') {
     const drug = await rawApiRequest('/admin/drugs', {
       method: 'POST',
@@ -308,16 +381,24 @@ export async function postJson(path, body) {
     const drugObject = extractObject(drug, {});
     const drugId = drugObject.id || drugObject._id || drugObject.drug_id;
     if (body.pharmacy_id || body.pharmacyId) {
-      return rawApiRequest('/admin/inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pharmacyId: body.pharmacy_id || body.pharmacyId,
-          drugId,
-          quantity: Number(body.quantity || 0),
-          price: Number(body.price || 0),
-        }),
-      });
+      try {
+        return await rawApiRequest('/admin/inventory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pharmacyId: body.pharmacy_id || body.pharmacyId,
+            drugId,
+            quantity: Number(body.quantity || 0),
+            price: Number(body.price || 0),
+          }),
+        });
+      } catch (inventoryError) {
+        // Do not leave an orphan drug record when linking it to inventory fails.
+        if (drugId) {
+          try { await rawApiRequest(`/admin/drugs/${drugId}`, { method: 'DELETE' }); } catch (_rollbackError) { /* original error is more useful */ }
+        }
+        throw inventoryError;
+      }
     }
     return drug;
   }
@@ -331,13 +412,16 @@ export async function postJson(path, body) {
 
 export async function putJson(path, body) {
   const { pathname } = splitPath(path);
+  if (pathname.startsWith('/pharmacies/')) {
+    return apiRequest(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pharmacyPayload(body)) });
+  }
   if (pathname.startsWith('/medicines/')) {
     const requests = [];
     if (body?.inventory_id || body?.inventoryId) {
       requests.push(rawApiRequest(`/admin/inventory/${body.inventory_id || body.inventoryId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity: Number(body.quantity || 0), price: Number(body.price || 0) }),
+        body: JSON.stringify({ quantity: Number(body.quantity || 0), price: Number(body.price || 0), pharmacyId: body.pharmacy_id || body.pharmacyId }),
       }));
     }
     if (body?.drug_id || body?.drugId || body?.id) {
