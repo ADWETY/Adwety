@@ -5,7 +5,7 @@ const validate = require('../middleware/validation');
 const controller = require('../controllers/profile.controller');
 const { rateLimit } = require('../middleware/security');
 
-router.use(auth);
+router.use(auth, auth.authorize(['admin', 'pharmacist']));
 
 router.get('/', controller.me);
 router.patch('/', validate(z.object({

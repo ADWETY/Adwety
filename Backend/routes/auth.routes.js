@@ -5,7 +5,6 @@ const validate = require('../middleware/validation');
 const auth = require('../middleware/auth');
 const controller = require('../controllers/auth.controller');
 const {
-  registrationLimiters,
   loginLimiter,
   mfaLimiter,
   refreshLimiter,
@@ -20,8 +19,8 @@ router.use((_req, res, next) => {
   next();
 });
 
-router.post('/register', ...registrationLimiters, validate(controller.registerSchema), controller.register);
-router.post('/register/verify-otp', otpRequestLimiter, controller.verifyRegisterOtp);
+// The browser dashboard is staff-only. Patient registration and patient login
+// remain available exclusively through /api/v1/mobile.
 router.post('/login', loginLimiter, validate(controller.loginSchema), controller.login);
 router.post('/login/verify-otp', mfaLimiter, validate(controller.mfaVerifySchema), controller.verifyMfaLogin);
 router.post('/mfa/login/verify', mfaLimiter, validate(controller.mfaVerifySchema), controller.verifyMfaLogin);
@@ -31,7 +30,8 @@ router.post('/forgot-password', forgotPairLimiter, forgotAccountLimiter, validat
 router.post('/reset-password', otpRequestLimiter, validate(controller.resetPasswordSchema), controller.resetPassword);
 router.post('/refresh', refreshLimiter, validate(controller.refreshSchema), controller.refresh);
 router.post('/logout', auth.optionalLenient, validate(controller.logoutSchema), controller.logout);
-router.post('/logout-all', auth, controller.logoutAll);
-router.get('/me', auth, controller.me);
+router.post('/logout-all', auth, auth.authorize(['admin', 'pharmacist']), controller.logoutAll);
+router.get('/csrf', auth, auth.authorize(['admin', 'pharmacist']), controller.csrf);
+router.get('/me', auth, auth.authorize(['admin', 'pharmacist']), controller.me);
 
 module.exports = router;

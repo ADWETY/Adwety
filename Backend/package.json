@@ -12,7 +12,7 @@
     "pm2:restart": "pm2 restart adwety-backend",
     "pm2:logs": "pm2 logs adwety-backend",
     "seed": "node scripts/seed-demo-data.js",
-    "security:check": "node scripts/security-report-check.js && node scripts/security-phase2-check.js && node scripts/security-runtime-smoke.js && node scripts/security-phase3-check.js && node scripts/security-phase4-check.js && node scripts/security-grandfathering-check.js",
+    "security:check": "node scripts/security-report-check.js && node scripts/security-phase2-check.js && node scripts/security-runtime-smoke.js && node scripts/security-phase3-check.js && node scripts/security-phase4-check.js && node scripts/security-grandfathering-check.js && npm run web-scope:check",
     "security:critical-check": "node scripts/security-report-check.js && node scripts/security-phase2-check.js && node scripts/security-runtime-smoke.js && node scripts/security-phase3-check.js && node scripts/security-phase4-check.js",
     "privacy:migrate-ai-logs": "node scripts/migrate-ai-logs-privacy.js",
     "security:phase2-check": "node scripts/security-phase2-check.js",
@@ -22,7 +22,10 @@
     "security:all": "npm run check && npm run security:check && npm run test:security:integration && npm audit --audit-level=high",
     "dast:staging": "bash scripts/dast-staging.sh",
     "security:phase4-check": "node scripts/security-phase4-check.js",
-    "security:grandfathering-check": "node scripts/security-grandfathering-check.js"
+    "security:grandfathering-check": "node scripts/security-grandfathering-check.js",
+    "retail:migrate-tenancy": "node scripts/migrate-retail-tenancy.js",
+    "web-scope:check": "node scripts/web-staff-retail-check.js",
+    "test:retail-contract": "node --test tests/csrf-cookie.test.js tests/retail-payload-contract.test.js tests/retail-selector-defaults.test.js tests/retail-stability.test.js tests/retail-admin-pharmacy-selection.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

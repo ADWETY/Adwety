@@ -1,6 +1,9 @@
 const router = require('express').Router();
 const validate = require('../middleware/validation');
 const controller = require('../controllers/retail.controller');
+const retailTenant = require('../middleware/retail-tenant');
+
+router.use(retailTenant);
 
 // Retail dashboard overview and business reports.
 router.get('/retail-dashboard', validate(controller.listSchema), controller.overview);

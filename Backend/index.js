@@ -4,9 +4,11 @@ const env = require('./config/env');
 const connectDatabase = require('./config/database');
 const { createApp } = require('./app');
 const { getClient, closeRedis } = require('./services/redis.service');
+const { ensureRetailIndexes } = require('./services/retail-indexes.service');
 
 async function bootstrap() {
   await connectDatabase();
+  await ensureRetailIndexes();
   await getClient();
   const app = createApp();
   const server = app.listen(env.port, '0.0.0.0', () => {

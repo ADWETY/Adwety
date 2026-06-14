@@ -1,4 +1,5 @@
 const { mongoose, withJsonTransform } = require('./base.model');
+const applyRetailTenant = require('./retail-tenant.plugin');
 
 const schema = withJsonTransform(new mongoose.Schema({
   type: { type: String, enum: ['customer', 'supplier'], required: true, index: true },
@@ -12,7 +13,10 @@ const schema = withJsonTransform(new mongoose.Schema({
   status: { type: String, enum: ['active', 'inactive'], default: 'active' }
 }, { timestamps: true, collection: 'store_people' }));
 
+applyRetailTenant(schema);
+
 schema.virtual('id').get(function () { return this._id.toString(); });
+schema.index({ pharmacyId: 1, type: 1, status: 1 });
 schema.index({ type: 1, status: 1 });
 schema.index({ name: 'text', phone: 'text', email: 'text', address: 'text' });
 

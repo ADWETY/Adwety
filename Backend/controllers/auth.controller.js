@@ -7,8 +7,8 @@ const { AppError } = require('../utils/helpers');
 const { signAccessToken } = require('../services/token.service');
 const { beginLogin } = require('../services/login.service');
 const { hashPassword, verifyPassword } = require('../services/password.service');
-const { createSessionTokens, rotateRefreshToken, revokeSession, revokeByRefreshToken, invalidateUserSessions, updateSessionMfa } = require('../services/session.service');
-const { getRefreshToken, setAccessCookie, setSessionCookies, clearSessionCookies, assertCsrfForSession } = require('../services/http-session.service');
+const { createSessionTokens, rotateRefreshToken, revokeSession, revokeByRefreshToken, invalidateUserSessions, updateSessionMfa, rotateSessionCsrf } = require('../services/session.service');
+const { getRefreshToken, setAccessCookie, setCsrfCookie, setSessionCookies, clearSessionCookies, assertCsrfForSession } = require('../services/http-session.service');
 const { loadChallenge, loadAnyChallenge, failChallenge, consumeChallenge, verifyTotp, verifyUserMfa, generateRecoveryCodes, recoveryHash, encryptMfaSecret, decryptSetupSecret } = require('../services/mfa.service');
 const { systemLog } = require('../services/logging.service');
 const { assertOtpDeliveryReady } = require('../services/email.service');
@@ -112,19 +112,29 @@ exports.register = asyncHandler(async (req, res) => {
 });
 
 exports.login = asyncHandler(async (req,res)=>{
-  const result=await beginLogin(req.validated.body.email,req.validated.body.password,req);
+  const result=await beginLogin(req.validated.body.email,req.validated.body.password,req,{allowedRoles:['admin','pharmacist']});
   await systemLog({type:'login_attempt',action:'auth.login',actorId:result.user._id,actorRole:result.user.role,success:true,message:result.mfa?'Password verified; MFA required':'Login successful',ip:req.ip});
   if(result.mfa) return success(res,{user:serialize(result.user),...result.mfa},'MFA verification required');
   setSessionCookies(res,result.tokens);
   return success(res,{...serialize(result.user),...tokenMetadata(result.tokens),mfa_grandfathered:result.mfaGrandfathered===true},'Login successful');
 });
 exports.me=asyncHandler(async(req,res)=>success(res,serialize(req.authUser),'Current user loaded'));
+exports.csrf=asyncHandler(async(req,res)=>{
+  const csrfToken=await rotateSessionCsrf(req.authSession._id);
+  setCsrfCookie(res,csrfToken);
+  return success(res,{csrf_token:csrfToken},'CSRF token refreshed');
+});
 exports.refresh=asyncHandler(async(req,res)=>{
   const body=req.validated.body||{};
   const cookieRefresh=getRefreshToken(req);
   const rawRefresh=body.refreshToken||body.refresh_token||cookieRefresh;
   const bearerClient=Boolean(body.refreshToken||body.refresh_token)||isMobileClient(req);
   const result=await rotateRefreshToken(rawRefresh,req,{requireCsrf:Boolean(cookieRefresh&&!bearerClient)});
+  if (!isMobileClient(req) && !['admin', 'pharmacist'].includes(result.user.role)) {
+    await revokeSession(result.session?._id, 'web_role_forbidden');
+    clearSessionCookies(res);
+    throw new AppError('Web dashboard access is limited to administrators and pharmacists', 403, { code: 'WEB_ACCESS_DENIED' });
+  }
   if(bearerClient) return success(res,{...serialize(result.user),...bearerTokenPayload(result)},'Token refreshed');
   setSessionCookies(res,result);
   return success(res,{...serialize(result.user),...tokenMetadata(result)},'Token refreshed');

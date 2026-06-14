@@ -87,6 +87,18 @@ async function rotateRefreshToken(rawToken, req, { requireCsrf = false } = {}) {
   }
 }
 
+async function rotateSessionCsrf(sessionId) {
+  const rawCsrf = crypto.randomBytes(32).toString('base64url');
+  const now = new Date();
+  const session = await Session.findOneAndUpdate(
+    { _id: sessionId, revokedAt: null, expiresAt: { $gt: now } },
+    { $set: { csrfTokenHash: csrfHash(rawCsrf), lastUsedAt: now } },
+    { new: true }
+  );
+  if (!session) throw new AppError('Session is no longer valid', 401);
+  return rawCsrf;
+}
+
 async function revokeSession(sessionId, reason = 'logout') {
   if (!sessionId) return;
   await Session.updateOne({ _id: sessionId, revokedAt: null }, { $set: { revokedAt: new Date(), revokeReason: reason } });
@@ -113,5 +125,6 @@ module.exports = {
   revokeByRefreshToken,
   invalidateUserSessions,
   updateSessionMfa,
+  rotateSessionCsrf,
   refreshHash
 };

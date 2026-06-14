@@ -44,7 +44,7 @@ async function upsertUser({ fullName, email, role }) {
 
 
 
-async function seedRetailDemo(admin) {
+async function seedRetailDemo(admin, pharmacyId) {
   const categories = [
     { name: 'Beverages', description: 'Drinks and juices', status: 'active' },
     { name: 'Groceries', description: 'Basic grocery items', status: 'active' },
@@ -63,13 +63,13 @@ async function seedRetailDemo(admin) {
     { type: 'supplier', name: 'Cairo Wholesale', phone: '+20 111 222 8888', email: 'wholesale@example.com', address: 'Cairo', openingBalance: 1200, balanceType: 'debit', status: 'active' }
   ];
 
-  for (const category of categories) await StoreCategory.findOneAndUpdate({ name: category.name }, { $set: category }, { new: true, upsert: true });
-  for (const warehouse of warehouses) await StoreWarehouse.findOneAndUpdate({ code: warehouse.code }, { $set: warehouse }, { new: true, upsert: true });
-  for (const person of [...customers, ...suppliers]) await StorePerson.findOneAndUpdate({ type: person.type, name: person.name }, { $set: person }, { new: true, upsert: true });
+  for (const category of categories) await StoreCategory.findOneAndUpdate({ pharmacyId, name: category.name }, { $set: { ...category, pharmacyId } }, { new: true, upsert: true, setDefaultsOnInsert: true });
+  for (const warehouse of warehouses) await StoreWarehouse.findOneAndUpdate({ pharmacyId, code: warehouse.code }, { $set: { ...warehouse, pharmacyId } }, { new: true, upsert: true, setDefaultsOnInsert: true });
+  for (const person of [...customers, ...suppliers]) await StorePerson.findOneAndUpdate({ pharmacyId, type: person.type, name: person.name }, { $set: { ...person, pharmacyId } }, { new: true, upsert: true, setDefaultsOnInsert: true });
 
-  const cats = await StoreCategory.find();
-  const whs = await StoreWarehouse.find();
-  const people = await StorePerson.find();
+  const cats = await StoreCategory.find({ pharmacyId });
+  const whs = await StoreWarehouse.find({ pharmacyId });
+  const people = await StorePerson.find({ pharmacyId });
   const categoryByName = new Map(cats.map((c) => [c.name, c]));
   const warehouseByCode = new Map(whs.map((w) => [w.code, w]));
   const personByName = new Map(people.map((p) => [p.name, p]));
@@ -82,9 +82,9 @@ async function seedRetailDemo(admin) {
     { code: 'P-2001', barcode: '6222001001', name: 'Rice 5kg', categoryId: categoryByName.get('Groceries')?._id, unit: 'Bag', unitFactor: 1, purchasePrice: 175, salePrice: 215, minStock: 15, stock: { [main._id]: 42, [branch._id]: 12 }, units: [{ name: 'Bag', factor: 1, salePrice: 215 }], status: 'active' },
     { code: 'P-3001', barcode: '6223001001', name: 'Dish Soap 750ml', categoryId: categoryByName.get('Cleaning')?._id, unit: 'Piece', unitFactor: 1, purchasePrice: 34, salePrice: 52, minStock: 18, stock: { [main._id]: 44, [branch._id]: 9 }, units: [{ name: 'Piece', factor: 1, salePrice: 52 }], status: 'active' }
   ];
-  for (const product of products) await StoreProduct.findOneAndUpdate({ code: product.code }, { $set: product }, { new: true, upsert: true, setDefaultsOnInsert: true });
+  for (const product of products) await StoreProduct.findOneAndUpdate({ pharmacyId, code: product.code }, { $set: { ...product, pharmacyId } }, { new: true, upsert: true, setDefaultsOnInsert: true });
 
-  const productByCode = new Map((await StoreProduct.find()).map((p) => [p.code, p]));
+  const productByCode = new Map((await StoreProduct.find({ pharmacyId })).map((p) => [p.code, p]));
   const saleNumber = 'SAL-0001';
   const saleItems = [
     { productId: productByCode.get('P-1001')._id, name: 'Mineral Water 1.5L', code: 'P-1001', barcode: '6221001001', unit: 'Bottle', unitFactor: 1, qty: 20, price: 10, purchasePrice: 6, discount: 0 },
@@ -94,13 +94,13 @@ async function seedRetailDemo(admin) {
   const saleTotal = saleSubtotal - 40;
   const salePaid = 900;
   await StoreInvoice.findOneAndUpdate(
-    { number: saleNumber },
-    { $set: { kind: 'sale', number: saleNumber, date: new Date(), warehouseId: branch._id, customerId: personByName.get('Ahmed Market')?._id, paymentMethod: 'cash', discount: 40, paid: salePaid, notes: 'Initial demo invoice', items: saleItems, subtotal: saleSubtotal, total: saleTotal, due: Math.max(0, saleTotal - salePaid), profit: saleItems.reduce((sum, item) => sum + (item.qty * item.price - item.discount) - item.qty * item.purchasePrice, 0) - 40, status: 'active', createdBy: admin?._id } },
+    { pharmacyId, number: saleNumber },
+    { $set: { pharmacyId, kind: 'sale', number: saleNumber, date: new Date(), warehouseId: branch._id, customerId: personByName.get('Ahmed Market')?._id, paymentMethod: 'cash', discount: 40, paid: salePaid, notes: 'Initial demo invoice', items: saleItems, subtotal: saleSubtotal, total: saleTotal, due: Math.max(0, saleTotal - salePaid), profit: saleItems.reduce((sum, item) => sum + (item.qty * item.price - item.discount) - item.qty * item.purchasePrice, 0) - 40, status: 'active', createdBy: admin?._id } },
     { new: true, upsert: true }
   );
   await StoreTreasuryMovement.findOneAndUpdate(
-    { sourceType: 'opening', category: 'Opening Balance' },
-    { $set: { date: new Date(), type: 'income', category: 'Opening Balance', amount: 15000, description: 'Demo opening balance', warehouseId: main._id, sourceType: 'opening', createdBy: admin?._id } },
+    { pharmacyId, sourceType: 'opening', category: 'Opening Balance' },
+    { $set: { pharmacyId, date: new Date(), type: 'income', category: 'Opening Balance', amount: 15000, description: 'Demo opening balance', warehouseId: main._id, sourceType: 'opening', createdBy: admin?._id } },
     { new: true, upsert: true }
   );
 }
@@ -145,7 +145,12 @@ async function main() {
     );
   }
 
-  await seedRetailDemo(admin);
+  const primaryPharmacy = pharmacyByName.get('BlueCare Pharmacy') || pharmacies[0];
+  if (primaryPharmacy) {
+    pharmacist.pharmacyId = primaryPharmacy._id;
+    await pharmacist.save();
+    await seedRetailDemo(admin, primaryPharmacy._id);
+  }
 
   console.log('Demo data seeded successfully.');
   console.log('Patient login: mona@adwety.app / AdwetyDemo#2026');

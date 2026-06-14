@@ -1,4 +1,5 @@
 const { mongoose, withJsonTransform } = require('./base.model');
+const applyRetailTenant = require('./retail-tenant.plugin');
 
 const unitSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 80 },
@@ -7,7 +8,7 @@ const unitSchema = new mongoose.Schema({
 }, { _id: false });
 
 const schema = withJsonTransform(new mongoose.Schema({
-  code: { type: String, required: true, unique: true, trim: true, maxlength: 80 },
+  code: { type: String, required: true, trim: true, maxlength: 80 },
   barcode: { type: String, default: '', trim: true, index: true, maxlength: 120 },
   name: { type: String, required: true, trim: true, maxlength: 220 },
   categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'StoreCategory', default: null, index: true },
@@ -33,7 +34,11 @@ schema.pre('save', function buildSearchText(next) {
   next();
 });
 
+applyRetailTenant(schema);
+
 schema.virtual('id').get(function () { return this._id.toString(); });
+schema.index({ pharmacyId: 1, code: 1 }, { unique: true });
+schema.index({ pharmacyId: 1, barcode: 1 });
 schema.index({ name: 'text', code: 'text', barcode: 'text', searchText: 'text' });
 schema.index({ status: 1, categoryId: 1 });
 

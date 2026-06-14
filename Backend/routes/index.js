@@ -3,6 +3,8 @@
 const router = require('express').Router();
 const env = require('../config/env');
 const adminRoutes = require('./admin.routes');
+const auth = require('../middleware/auth');
+const retailRoutes = require('./retail.routes');
 const { deprecated, gone } = require('../middleware/api-lifecycle');
 
 router.get('/meta', (_req, res) => res.json({
@@ -13,7 +15,6 @@ router.get('/meta', (_req, res) => res.json({
 
 router.use('/auth', require('./auth.routes'));
 router.use('/profile', require('./profile.routes'));
-router.use('/prescriptions', require('./prescriptions.routes'));
 router.use('/support-tickets', require('./support.routes'));
 router.use('/notifications', require('./notifications.routes'));
 router.use('/pharmacies', require('./pharmacies.routes'));
@@ -21,7 +22,10 @@ router.use('/drugs', require('./drugs.routes'));
 router.use('/inventory', require('./inventory.routes'));
 router.use('/pharmacy', require('./pharmacy.routes'));
 router.use('/search', require('./search.routes'));
-router.use('/ai', require('./ai.routes'));
+
+// Shared retail API: administrators must explicitly select one pharmacy, while
+// pharmacists are transparently restricted to the pharmacy linked to their identity.
+router.use('/retail', auth, auth.authorize(['admin', 'pharmacist']), retailRoutes);
 
 router.use('/admin', adminRoutes);
 if (env.enableDashboardAlias) {

@@ -14,6 +14,7 @@ const { systemLog } = require('../services/logging.service');
 const objectId = z.string().refine(isValidObjectId, 'Invalid ObjectId format');
 const passwordSchema = z.string().min(12).max(128);
 const roleEnum = z.enum(['admin', 'pharmacist', 'patient']);
+const staffRoleEnum = z.enum(['admin', 'pharmacist']);
 const statusEnum = z.enum(['pending', 'approved', 'active', 'inactive', 'rejected']);
 const arr = z.array(z.string().trim().min(1).max(120)).optional().default([]);
 
@@ -56,7 +57,7 @@ const userBody = z.object({
   name: z.string().min(2).max(100).optional(),
   email: z.string().email().max(254).optional(),
   password: passwordSchema.optional(),
-  role: roleEnum.optional(),
+  role: staffRoleEnum.optional(),
   pharmacyId: objectId.optional().nullable(),
   pharmacy_id: objectId.optional().nullable(),
   phoneNumber: z.string().max(32).optional(),
@@ -124,7 +125,12 @@ exports.syncInventorySchema = z.object({ body: z.object({ pharmacyId: objectId.o
 function meta(p, total) { return { page: p.page, limit: p.limit, total, pages: Math.ceil(total / p.limit) }; }
 function rx(value) { return new RegExp(escapeRegex(value), 'i'); }
 function id(value) { return value ? String(value._id || value.id || value) : null; }
-function userDto(user) { return { id: id(user), name: user.fullName, fullName: user.fullName, email: user.email, role: user.role, phoneNumber: user.phoneNumber || '', phone_number: user.phoneNumber || '', pharmacyId: user.pharmacyId || null, pharmacy_id: user.pharmacyId || null, isActive: user.isActive, is_active: user.isActive, lastLoginAt: user.lastLoginAt, last_login_at: user.lastLoginAt, createdAt: user.createdAt, created_at: user.createdAt, updatedAt: user.updatedAt, updated_at: user.updatedAt, mfaEnabled: user.mfaEnabled === true, mfa_enabled: user.mfaEnabled === true, mfaPolicyVersion: Number(user.mfaPolicyVersion || 1), mfa_policy_version: Number(user.mfaPolicyVersion || 1), mfaGrandfathered: user.role === 'admin' && Number(user.mfaPolicyVersion || 1) < 2 && user.mfaEnabled !== true, mfa_grandfathered: user.role === 'admin' && Number(user.mfaPolicyVersion || 1) < 2 && user.mfaEnabled !== true, passwordPolicyVersion: Number(user.passwordPolicyVersion || 1), password_policy_version: Number(user.passwordPolicyVersion || 1), passwordUpgradeRecommended: Number(user.passwordPolicyVersion || 1) < 2, password_upgrade_recommended: Number(user.passwordPolicyVersion || 1) < 2 }; }
+function userDto(user) {
+  const populatedPharmacy = user.pharmacyId && typeof user.pharmacyId === 'object' && user.pharmacyId.name;
+  const pharmacyId = populatedPharmacy ? id(user.pharmacyId) : (user.pharmacyId ? String(user.pharmacyId) : null);
+  const pharmacyName = populatedPharmacy ? user.pharmacyId.name : '';
+  return { id: id(user), name: user.fullName, fullName: user.fullName, email: user.email, role: user.role, phoneNumber: user.phoneNumber || '', phone_number: user.phoneNumber || '', pharmacyId, pharmacy_id: pharmacyId, pharmacyName, pharmacy_name: pharmacyName, isActive: user.isActive, is_active: user.isActive, lastLoginAt: user.lastLoginAt, last_login_at: user.lastLoginAt, createdAt: user.createdAt, created_at: user.createdAt, updatedAt: user.updatedAt, updated_at: user.updatedAt, mfaEnabled: user.mfaEnabled === true, mfa_enabled: user.mfaEnabled === true, mfaPolicyVersion: Number(user.mfaPolicyVersion || 1), mfa_policy_version: Number(user.mfaPolicyVersion || 1), mfaGrandfathered: user.role === 'admin' && Number(user.mfaPolicyVersion || 1) < 2 && user.mfaEnabled !== true, mfa_grandfathered: user.role === 'admin' && Number(user.mfaPolicyVersion || 1) < 2 && user.mfaEnabled !== true, passwordPolicyVersion: Number(user.passwordPolicyVersion || 1), password_policy_version: Number(user.passwordPolicyVersion || 1), passwordUpgradeRecommended: Number(user.passwordPolicyVersion || 1) < 2, password_upgrade_recommended: Number(user.passwordPolicyVersion || 1) < 2 };
+}
 function pharmacyDto(p, extra = {}) { return { id: id(p), name: p.name, address: p.address, phone: p.phone || '', email: p.email || '', status: p.status, latitude: p.latitude, longitude: p.longitude, location: p.location, workingHours: p.workingHours || '', working_hours: p.workingHours || '', googleMapsUrl: p.googleMapsUrl || '', google_maps_url: p.googleMapsUrl || '', ownerId: p.ownerId || null, owner_id: p.ownerId || null, rating: p.rating || 0, createdAt: p.createdAt, created_at: p.createdAt, updatedAt: p.updatedAt, updated_at: p.updatedAt, ...extra }; }
 function pharmacyRequestDto(p) {
   const owner = p.ownerId && typeof p.ownerId === 'object' ? p.ownerId : null;
@@ -206,10 +212,10 @@ exports.users = asyncHandler(async (req, res) => {
   if (req.validated.query.role) filter.role = req.validated.query.role;
   const active = req.validated.query.isActive ?? req.validated.query.is_active;
   if (active !== undefined) filter.isActive = active;
-  const [rows, total] = await Promise.all([User.find(filter).sort({ createdAt: -1 }).skip(p.skip).limit(p.limit).lean(), User.countDocuments(filter)]);
+  const [rows, total] = await Promise.all([User.find(filter).populate('pharmacyId', 'name status').sort({ createdAt: -1 }).skip(p.skip).limit(p.limit).lean(), User.countDocuments(filter)]);
   return success(res, { data: rows.map(userDto), pagination: meta(p, total) }, 'Users loaded');
 });
-exports.getUser = asyncHandler(async (req, res) => success(res, userDto(await requireDoc(User, req.validated.params.id, 'User')), 'User loaded'));
+exports.getUser = asyncHandler(async (req, res) => { const user = await requireDoc(User, req.validated.params.id, 'User'); await user.populate('pharmacyId', 'name status'); return success(res, userDto(user), 'User loaded'); });
 exports.createUser = asyncHandler(async (req, res) => {
   const data = cleanUserPayload(req.validated.body, true);
   const exists = await User.findOne({ email: data.email }); if (exists) throw new AppError('Email already exists', 409);
@@ -225,7 +231,12 @@ exports.updateUser = asyncHandler(async (req, res) => {
   const data = cleanUserPayload(req.validated.body);
   if (data.email && data.email !== user.email) { const exists = await User.findOne({ email: data.email, _id: { $ne: user._id } }); if (exists) throw new AppError('Email already exists', 409); }
   const promotedToAdmin = data.role === 'admin' && user.role !== 'admin';
-  const securityChanged = Boolean(req.validated.body.password) || (data.isActive === false && user.isActive !== false) || (data.role && data.role !== user.role);
+  if (data.pharmacyId) {
+    const pharmacy = await requireDoc(Pharmacy, data.pharmacyId, 'Pharmacy');
+    if (!['active', 'approved'].includes(pharmacy.status)) throw new AppError('Only an active pharmacy can be assigned to a pharmacist', 422);
+  }
+  if ((data.role || user.role) === 'admin') data.pharmacyId = null;
+  const securityChanged = Boolean(req.validated.body.password) || (data.isActive === false && user.isActive !== false) || (data.role && data.role !== user.role) || (data.pharmacyId !== undefined && String(data.pharmacyId || '') !== String(user.pharmacyId || ''));
   Object.assign(user, data);
   if (promotedToAdmin) {
     user.mfaPolicyVersion = 2;
@@ -238,6 +249,7 @@ exports.updateUser = asyncHandler(async (req, res) => {
   await user.save();
   if (securityChanged) await invalidateUserSessions(user._id, 'admin_security_change', { incrementVersion: true });
   await systemLog({ type: 'admin_action', action: 'admin.users.update', actorId: req.authUser._id, actorRole: req.authRole, message: 'User updated', metadata: { userId: user._id } });
+  await user.populate('pharmacyId', 'name status');
   return success(res, userDto(user), 'User updated');
 });
 exports.deleteUser = asyncHandler(async (req, res) => { const deleted = await User.findByIdAndDelete(req.validated.params.id); if (!deleted) throw new AppError('User not found', 404); await systemLog({ type: 'admin_action', action: 'admin.users.delete', actorId: req.authUser._id, actorRole: req.authRole, message: 'User deleted', metadata: { userId: deleted._id } }); return success(res, { deleted: true }, 'User deleted'); });

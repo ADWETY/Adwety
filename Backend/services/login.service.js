@@ -6,13 +6,17 @@ const { createChallenge } = require('./mfa.service');
 const { adminRequiresMfa, isLegacyAdminMfaExempt } = require('./mfa-policy.service');
 const abuse = require('./auth-abuse.service');
 
-async function beginLogin(email,password,req){
+async function beginLogin(email,password,req,options={}){
   const normalized=String(email||'').trim().toLowerCase();
   const locked=await abuse.lockRemaining(normalized,req.ip);
   if(locked){req.res?.setHeader('Retry-After',String(locked)); throw new AppError('Invalid email or password',401);}
   const user=await User.findOne({email:normalized}).select('+passwordHash +mfaSecretEncrypted +mfaRecoveryCodeHashes');
   const ok=user?await verifyPassword(password,user.passwordHash):false;
   if(!user||!ok||user.isActive===false){const f=await abuse.recordFailure(normalized,req.ip); if(f.lockSeconds) req.res?.setHeader('Retry-After',String(f.lockSeconds)); throw new AppError('Invalid email or password',401);}
+  const allowedRoles = Array.isArray(options.allowedRoles) ? options.allowedRoles : null;
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    throw new AppError('Web dashboard access is limited to administrators and pharmacists',403,{code:'WEB_ACCESS_DENIED'});
+  }
   await abuse.clearFailures(normalized,req.ip);
   const legacyHash = !String(user.passwordHash || '').startsWith('v2$');
   let passwordUpgradeRecommended = Number(user.passwordPolicyVersion || 1) < 2;

@@ -13,6 +13,7 @@ module.exports = {
   StoreTransfer: require('./store-transfer.model'),
   StoreInventoryCount: require('./store-inventory-count.model'),
   StoreTreasuryMovement: require('./store-treasury-movement.model'),
+  StoreSequence: require('./store-sequence.model'),
   AiLog: require('./ai-log.model'),
   SystemLog: require('./system-log.model'),
   Notification: require('./notification.model'),

@@ -69,47 +69,79 @@ function assertCsrfForSession(req, session, { force = false } = {}) {
   }
 }
 
-function baseCookieOptions({ httpOnly, maxAge }) {
+function cookieOptions({ httpOnly, maxAge, path = env.cookiePath }) {
   return {
     httpOnly,
     secure: env.cookieSecure,
     sameSite: env.cookieSameSite,
-    path: env.cookiePath,
+    path,
     maxAge
   };
 }
 
+function clearCookieAtPath(res, name, { httpOnly, path, domain = '' }) {
+  res.clearCookie(name, {
+    httpOnly,
+    secure: env.cookieSecure,
+    sameSite: env.cookieSameSite,
+    path,
+    ...(domain ? { domain } : {})
+  });
+}
+
 function setAccessCookie(res, accessToken) {
-  res.cookie(env.accessCookieName, accessToken, baseCookieOptions({
+  res.cookie(env.accessCookieName, accessToken, cookieOptions({
     httpOnly: true,
     maxAge: env.accessTokenMinutes * 60 * 1000
   }));
 }
 
-function setSessionCookies(res, tokens) {
-  setAccessCookie(res, tokens.access_token || tokens.token);
-  res.cookie(env.refreshCookieName, tokens.refresh_token, baseCookieOptions({
-    httpOnly: true,
-    maxAge: env.refreshTokenDays * 24 * 60 * 60 * 1000
-  }));
-  res.cookie(env.csrfCookieName, tokens.csrf_token, {
-    ...baseCookieOptions({
+function setCsrfCookie(res, csrfToken) {
+  // Remove the legacy /api/v1-scoped CSRF cookie before setting the new root
+  // cookie. This prevents duplicate cookies with the same name from producing
+  // intermittent token mismatches in different browsers.
+  if (env.csrfCookiePath !== env.cookiePath) {
+    clearCookieAtPath(res, env.csrfCookieName, {
       httpOnly: false,
-      maxAge: env.refreshTokenDays * 24 * 60 * 60 * 1000
+      path: env.cookiePath,
+      domain: env.csrfCookieDomain
+    });
+  }
+
+  res.cookie(env.csrfCookieName, csrfToken, {
+    ...cookieOptions({
+      httpOnly: false,
+      maxAge: env.refreshTokenDays * 24 * 60 * 60 * 1000,
+      path: env.csrfCookiePath
     }),
     ...(env.csrfCookieDomain ? { domain: env.csrfCookieDomain } : {})
   });
 }
 
+function setSessionCookies(res, tokens) {
+  setAccessCookie(res, tokens.access_token || tokens.token);
+  res.cookie(env.refreshCookieName, tokens.refresh_token, cookieOptions({
+    httpOnly: true,
+    maxAge: env.refreshTokenDays * 24 * 60 * 60 * 1000
+  }));
+  setCsrfCookie(res, tokens.csrf_token);
+}
+
 function clearSessionCookies(res) {
-  const common = {
-    secure: env.cookieSecure,
-    sameSite: env.cookieSameSite,
-    path: env.cookiePath
-  };
-  res.clearCookie(env.accessCookieName, { ...common, httpOnly: true });
-  res.clearCookie(env.refreshCookieName, { ...common, httpOnly: true });
-  res.clearCookie(env.csrfCookieName, { ...common, httpOnly: false, ...(env.csrfCookieDomain ? { domain: env.csrfCookieDomain } : {}) });
+  clearCookieAtPath(res, env.accessCookieName, { httpOnly: true, path: env.cookiePath });
+  clearCookieAtPath(res, env.refreshCookieName, { httpOnly: true, path: env.cookiePath });
+  clearCookieAtPath(res, env.csrfCookieName, {
+    httpOnly: false,
+    path: env.csrfCookiePath,
+    domain: env.csrfCookieDomain
+  });
+  if (env.csrfCookiePath !== env.cookiePath) {
+    clearCookieAtPath(res, env.csrfCookieName, {
+      httpOnly: false,
+      path: env.cookiePath,
+      domain: env.csrfCookieDomain
+    });
+  }
 }
 
 module.exports = {
@@ -122,6 +154,7 @@ module.exports = {
   csrfHash,
   assertCsrfForSession,
   setAccessCookie,
+  setCsrfCookie,
   setSessionCookies,
   clearSessionCookies
 };

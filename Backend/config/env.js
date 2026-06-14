@@ -95,6 +95,10 @@ module.exports = {
   refreshCookieName: clean(process.env.REFRESH_COOKIE_NAME, 'adwety_refresh'),
   csrfCookieName: clean(process.env.CSRF_COOKIE_NAME, 'adwety_csrf'),
   csrfCookieDomain: clean(process.env.CSRF_COOKIE_DOMAIN),
+  // The CSRF cookie must be readable by the SPA on routes such as /categories.
+  // Access/refresh cookies remain scoped to /api/v1, but the non-HttpOnly CSRF
+  // cookie uses / so document.cookie can read it from every dashboard page.
+  csrfCookiePath: clean(process.env.CSRF_COOKIE_PATH, '/'),
   cookieSecure: bool(process.env.COOKIE_SECURE, nodeEnv === 'production'),
   cookieSameSite: clean(process.env.COOKIE_SAME_SITE, 'strict').toLowerCase(),
   cookiePath: clean(process.env.COOKIE_PATH, '/api/v1'),
@@ -145,6 +149,9 @@ module.exports = {
   redisPassword: secret('REDIS_PASSWORD'),
   redisRequired: bool(process.env.REDIS_REQUIRED, nodeEnv === 'production'),
   rateLimitPrefix: clean(process.env.RATE_LIMIT_PREFIX, 'adwety:rl'),
+  apiRateLimitWindowMs: number(process.env.API_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000, 60 * 1000, 60 * 60 * 1000),
+  apiRateLimitReadMax: number(process.env.API_RATE_LIMIT_READ_MAX, 5000, 300, 50000),
+  apiRateLimitWriteMax: number(process.env.API_RATE_LIMIT_WRITE_MAX, 1000, 100, 10000),
   smtpHost: clean(process.env.SMTP_HOST),
   smtpPort: number(process.env.SMTP_PORT, 587, 1, 65535),
   smtpSecure: bool(process.env.SMTP_SECURE, false),

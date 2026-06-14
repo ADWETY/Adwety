@@ -24,10 +24,13 @@ function createApp() {
   app.use(sanitizeRequest);
 
   const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 300,
-    prefix: 'api-global-all-aliases',
-    keyGenerator: (req) => `${req.ip}:${req.method}`
+    windowMs: env.apiRateLimitWindowMs,
+    max: (req) => ['GET', 'HEAD'].includes(req.method)
+      ? env.apiRateLimitReadMax
+      : env.apiRateLimitWriteMax,
+    prefix: 'api-global-all-aliases-v2',
+    keyGenerator: (req) => `${req.ip}:${req.method}`,
+    skip: (req) => req.method === 'OPTIONS',
   });
 
   app.get('/health', (_req, res) => res.json({

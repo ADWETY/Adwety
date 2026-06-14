@@ -22,10 +22,10 @@ router.use(auth, auth.authorize(['admin']));
 router.use(auth.requireRecentMfaForWrites);
 
 
-// Retail/MATGR business modules. Mounted on both /admin/<module> and /admin/retail/<module>.
+// Retail/MATGR business modules. Admin retail access is always tenant-scoped
+// under /admin/retail and requires an explicit X-Pharmacy-ID selection.
 const retailRoutes = require('./retail.routes');
 router.use('/retail', retailRoutes);
-router.use('/', retailRoutes);
 
 // Dashboard overview and settings.
 router.get('/analytics', validate(controller.analyticsSchema), controller.analytics);
