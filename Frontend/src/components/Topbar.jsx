@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Menu, Moon, Sun } from 'lucide-react';
 import LanguageToggle from './LanguageToggle';
 import RoleBadge from './RoleBadge';
@@ -21,7 +22,7 @@ export default function Topbar({ title, description, onMenuClick }) {
     <div className="card mb-6 p-5">
       <div className={cn('flex flex-col gap-4 md:flex-row md:items-start md:justify-between', isRtl && 'md:flex-row-reverse')}>
         <div className={cn('flex items-start gap-3', isRtl && 'flex-row-reverse text-right')}>
-          <button type="button" onClick={onMenuClick} className="btn-secondary lg:hidden" aria-label="Open menu">
+          <button type="button" onClick={onMenuClick} className="btn-secondary lg:hidden" aria-label={t('app.openMenu')}>
             <Menu className="h-4 w-4" />
           </button>
           <div>
@@ -36,10 +37,9 @@ export default function Topbar({ title, description, onMenuClick }) {
             {theme === 'dark' ? t('app.lightMode') : t('app.darkMode')}
           </button>
           <LanguageToggle />
-          <RoleBadge role={session?.role} />
-          <span className="badge border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-            {t('app.ai')}: {env.aiProvider}
-          </span>
+          <Link to="/profile" className="transition hover:-translate-y-0.5" title={t('pages.profile.title', 'Profile')}>
+            <RoleBadge role={session?.role} />
+          </Link>
         </div>
       </div>
     </div>

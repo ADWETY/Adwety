@@ -17,17 +17,45 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  function resetRequestErrorMessage(error) {
+    const code = error?.payload?.details?.code || error?.payload?.code;
+    if (error?.status === 404 || code === 'RESET_ACCOUNT_NOT_FOUND') {
+      return 'البريد الإلكتروني غير موجود في قاعدة البيانات أو غير مفعّل للوحة التحكم.';
+    }
+    if (code === 'OTP_DELIVERY_FAILED') {
+      return 'الحساب موجود، لكن فشل إرسال كود إعادة التعيين. راجع إعدادات إرسال البريد أو جرّب مرة أخرى.';
+    }
+    return error?.message || 'حدث خطأ أثناء طلب كود إعادة التعيين.';
+  }
+
   async function onRequestOtp(event) {
     event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError(t('forms.emailInvalid'));
+      return;
+    }
     setSubmitting(true);
     setMessage('');
     setError('');
+    setOtpState(null);
     try {
-      await requestPasswordReset({ email });
-      setOtpState({ email, expires_in_minutes: 10 });
-      setMessage(t('otp.ifExists'));
+      const resetInfo = await requestPasswordReset({ email: normalizedEmail });
+      const requestId = resetInfo.request_id || resetInfo.requestId || resetInfo.otp_token;
+      if (!requestId) throw new Error('Password reset request id was not returned by the server.');
+      setEmail(normalizedEmail);
+      setOtpState({
+        email: normalizedEmail,
+        destination: resetInfo.delivery?.destination || normalizedEmail,
+        expires_in_minutes: resetInfo.expires_in_minutes || 10,
+        request_id: requestId,
+        otp_token: requestId,
+        otp_code: resetInfo.otp_code
+      });
+      setMessage(resetInfo.otp_code ? `${t('otp.ifExists')} Dev OTP: ${resetInfo.otp_code}` : t('otp.ifExists'));
     } catch (submitError) {
-      setError(submitError.message);
+      setOtpState(null);
+      setError(resetRequestErrorMessage(submitError));
     } finally {
       setSubmitting(false);
     }
@@ -42,7 +70,7 @@ export default function ForgotPasswordPage() {
     setSubmitting(true);
     setError('');
     try {
-      await resetPassword({ email: otpState.email, otpToken: otpState.otp_token, otp, newPassword: passwords.newPassword });
+      await resetPassword({ email: otpState.email, requestId: otpState.request_id, otpToken: otpState.otp_token, otp, newPassword: passwords.newPassword });
       setMessage(t('otp.passwordResetDone'));
       toast.success(t('otp.passwordResetDone'));
       setOtpState(null);
@@ -65,7 +93,7 @@ export default function ForgotPasswordPage() {
         {otpState ? (
           <form className="mt-8 space-y-5" onSubmit={onReset}>
             <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
-              {t('otp.sentTo')} {otpState.email}. {t('otp.expiresIn')} {otpState.expires_in_minutes} {t('otp.minutes')}.
+              {t('otp.sentTo')} {otpState.destination || otpState.email}. {t('otp.expiresIn')} {otpState.expires_in_minutes} {t('otp.minutes')}.
             </div>
             <div>
               <label className="label">{t('otp.code')}</label>
@@ -92,7 +120,7 @@ export default function ForgotPasswordPage() {
           <form className="mt-8 space-y-5" onSubmit={onRequestOtp}>
             <div>
               <label className="label">{t('common.email')}</label>
-              <input className="input" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />
+              <input className="input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />
             </div>
             {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">{message}</div> : null}
             {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100">{error}</div> : null}

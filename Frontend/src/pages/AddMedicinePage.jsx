@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Save, X } from 'lucide-react';
-import { getJson, postJson } from '../lib/api';
-import { demoPharmacies } from '../lib/demoData';
+import { extractArray, getJson, postJson } from '../lib/api';
 import { formatCurrency, stockStatus, stockTone } from '../lib/utils';
 import { usePreferences } from '../context/PreferencesContext';
 import { useToast } from '../context/ToastContext';
@@ -15,11 +14,11 @@ export default function AddMedicinePage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [form, setForm] = useState(initialForm);
-  const [pharmacies, setPharmacies] = useState(demoPharmacies);
+  const [pharmacies, setPharmacies] = useState([]);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { async function load() { try { const result = await getJson('/pharmacies'); const list = result.data || demoPharmacies; setPharmacies(list); const pharmacyId = params.get('pharmacy_id') || list[0]?.id || ''; setForm((current) => ({ ...current, pharmacy_id: pharmacyId })); } catch (_error) { const pharmacyId = params.get('pharmacy_id') || demoPharmacies[0]?.id || ''; setForm((current) => ({ ...current, pharmacy_id: pharmacyId })); } } load(); }, [params]);
+  useEffect(() => { async function load() { try { const result = await getJson('/pharmacies'); const list = extractArray(result); setPharmacies(list); const pharmacyId = params.get('pharmacy_id') || list[0]?.id || ''; setForm((current) => ({ ...current, pharmacy_id: pharmacyId })); } catch (loadError) { toast.error(loadError.message || t('toast.failed')); setPharmacies([]); } } load(); }, [params]);
   const selectedPharmacy = useMemo(() => pharmacies.find((item) => item.id === form.pharmacy_id), [pharmacies, form.pharmacy_id]);
   const status = stockStatus(form.quantity);
   function update(field, value) { setForm((current) => ({ ...current, [field]: value })); setErrors((current) => ({ ...current, [field]: '' })); }

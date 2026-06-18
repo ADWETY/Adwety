@@ -1,0 +1,196 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: adwety-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: adwety
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongo_root_username
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
+    secrets:
+      - mongo_root_username
+      - mongo_root_password
+      - mongo_app_username
+      - mongo_app_password
+    expose:
+      - "27017"
+    volumes:
+      - adwety_mongo_data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/10-create-app-user.js:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --host 127.0.0.1 --authenticationDatabase admin -u \"$$(cat /run/secrets/mongo_root_username)\" -p \"$$(cat /run/secrets/mongo_root_password)\" --eval 'db.adminCommand({ ping: 1 })' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [backend_internal]
+
+  redis:
+    image: redis:7-alpine
+    container_name: adwety-redis
+    restart: unless-stopped
+    command: ["sh", "-c", "exec redis-server --appendonly yes --save 60 1000 --requirepass \"$$(cat /run/secrets/redis_password)\""]
+    secrets:
+      - redis_password
+    expose:
+      - "6379"
+    volumes:
+      - adwety_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    networks: [backend_internal]
+
+  clamav:
+    image: clamav/clamav:stable
+    container_name: adwety-clamav
+    restart: unless-stopped
+    expose:
+      - "3310"
+    volumes:
+      - adwety_clamav_data:/var/lib/clamav
+    security_opt:
+      - no-new-privileges:true
+    networks: [backend_internal]
+
+  backend:
+    build: .
+    container_name: adwety-backend
+    restart: unless-stopped
+    init: true
+    user: "node"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "127.0.0.1:6500:6500"
+    environment:
+      NODE_ENV: production
+      PORT: 6500
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+      MONGO_DATABASE: adwety
+      MONGO_APP_USERNAME_FILE: /run/secrets/mongo_app_username
+      MONGO_APP_PASSWORD_FILE: /run/secrets/mongo_app_password
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      OTP_HASH_SECRET_FILE: /run/secrets/otp_hash_secret
+      REFRESH_TOKEN_SECRET_FILE: /run/secrets/refresh_token_secret
+      CSRF_SECRET_FILE: /run/secrets/csrf_secret
+      PASSWORD_PEPPER_FILE: /run/secrets/password_pepper
+      DATA_ENCRYPTION_KEY_FILE: /run/secrets/data_encryption_key
+      MFA_ENCRYPTION_KEY_FILE: /run/secrets/mfa_encryption_key
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
+      SMTP_PASS_FILE: /run/secrets/smtp_password
+      ACCESS_TOKEN_MINUTES: 15
+      REFRESH_TOKEN_DAYS: 30
+      ACCESS_COOKIE_NAME: adwety_access
+      REFRESH_COOKIE_NAME: adwety_refresh
+      CSRF_COOKIE_NAME: adwety_csrf
+      CSRF_COOKIE_DOMAIN: ${CSRF_COOKIE_DOMAIN:-.adwetycare.me}
+      CSRF_COOKIE_PATH: /
+      COOKIE_SECURE: "true"
+      COOKIE_SAME_SITE: strict
+      COOKIE_PATH: /api/v1
+      PASSWORD_BREACH_CHECK: required
+      OTP_TTL_MINUTES: 10
+      OTP_MAX_ATTEMPTS: 5
+      OTP_DEV_CONSOLE: "false"
+      MFA_CHALLENGE_MINUTES: 10
+      MFA_MAX_ATTEMPTS: 5
+      MFA_REAUTH_MINUTES: 10
+      REDIS_REQUIRED: "true"
+      API_RATE_LIMIT_WINDOW_MS: ${API_RATE_LIMIT_WINDOW_MS:-900000}
+      API_RATE_LIMIT_READ_MAX: ${API_RATE_LIMIT_READ_MAX:-5000}
+      API_RATE_LIMIT_WRITE_MAX: ${API_RATE_LIMIT_WRITE_MAX:-1000}
+      AI_RATE_LIMIT_MAX: 10
+      AI_RATE_LIMIT_WINDOW_MS: 60000
+      AI_DAILY_QUOTA: 50
+      AI_TIMEOUT_MS: 30000
+      AI_CIRCUIT_FAILURE_THRESHOLD: 5
+      AI_CIRCUIT_OPEN_MS: 60000
+      AI_LOG_RETENTION_DAYS: 30
+      AI_STORE_SENSITIVE_BY_DEFAULT: "false"
+      MAX_FILE_SIZE_MB: 5
+      MAX_IMAGE_PIXELS: 20000000
+      MAX_PDF_PAGES: 10
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+      CLAMAV_REQUIRED: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS in the deployment environment}
+      CORS_ALLOW_NO_ORIGIN: "false"
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      TRUST_PROXY_REQUIRED: "true"
+      ENABLE_API_ALIAS: "false"
+      ENABLE_MOBILE_V1_ALIAS: "false"
+      ENABLE_LEGACY_DASHBOARD_ROUTES: "false"
+      ENABLE_DASHBOARD_ALIAS: "false"
+      API_SUNSET_AT: ${API_SUNSET_AT:-2026-12-31T23:59:59Z}
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST in the deployment environment}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM in the deployment environment}
+      SMTP_REJECT_UNAUTHORIZED: ${SMTP_REJECT_UNAUTHORIZED:-true}
+    secrets:
+      - mongo_app_username
+      - mongo_app_password
+      - jwt_secret
+      - otp_hash_secret
+      - refresh_token_secret
+      - csrf_secret
+      - password_pepper
+      - data_encryption_key
+      - mfa_encryption_key
+      - redis_password
+      - gemini_api_key
+      - smtp_password
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clamav:
+        condition: service_started
+    volumes:
+      - adwety_uploads:/app/private_uploads
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks:
+      - backend_internal
+      - backend_egress
+
+secrets:
+  mongo_root_username: { file: ./secrets/mongo_root_username.txt }
+  mongo_root_password: { file: ./secrets/mongo_root_password.txt }
+  mongo_app_username: { file: ./secrets/mongo_app_username.txt }
+  mongo_app_password: { file: ./secrets/mongo_app_password.txt }
+  jwt_secret: { file: ./secrets/jwt_secret.txt }
+  otp_hash_secret: { file: ./secrets/otp_hash_secret.txt }
+  refresh_token_secret: { file: ./secrets/refresh_token_secret.txt }
+  csrf_secret: { file: ./secrets/csrf_secret.txt }
+  password_pepper: { file: ./secrets/password_pepper.txt }
+  data_encryption_key: { file: ./secrets/data_encryption_key.txt }
+  mfa_encryption_key: { file: ./secrets/mfa_encryption_key.txt }
+  redis_password: { file: ./secrets/redis_password.txt }
+  gemini_api_key: { file: ./secrets/gemini_api_key.txt }
+  smtp_password: { file: ./secrets/smtp_password.txt }
+
+volumes:
+  adwety_mongo_data:
+  adwety_redis_data:
+  adwety_clamav_data:
+  adwety_uploads:
+
+networks:
+  backend_internal:
+    driver: bridge
+    internal: true
+  backend_egress:
+    driver: bridge

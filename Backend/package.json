@@ -1,18 +1,31 @@
 {
   "name": "adwety-backend",
   "version": "1.0.0",
-  "description": "ADWETY pharmacy and patient backend with Gemini-ready AI integration",
+  "description": "Complete ADWETY backend with authentication, pharmacy management, drugs database, inventory snapshots, search, Gemini AI prescription analysis, logging, admin APIs, and VPS/PM2 deployment support.",
   "main": "index.js",
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
-    "seed": "node scripts/seed.js",
-    "check": "node --check index.js",
-    "seed:empty": "node scripts/create-demo-data.js",
-    "seed:force": "node scripts/force-seed.js",
-    "db:demo": "node scripts/create-demo-data.js",
-    "security:check": "node scripts/security-check.js",
-    "test:smtp": "node scripts/test-smtp.js"
+    "prod": "NODE_ENV=production node index.js",
+    "check": "node --check index.js && node --check app.js && find config controllers middleware models routes services utils scripts tests -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:restart": "pm2 restart adwety-backend",
+    "pm2:logs": "pm2 logs adwety-backend",
+    "seed": "node scripts/seed-demo-data.js",
+    "security:check": "node scripts/security-report-check.js && node scripts/security-phase2-check.js && node scripts/security-runtime-smoke.js && node scripts/security-phase3-check.js && node scripts/security-phase4-check.js && node scripts/security-grandfathering-check.js && npm run web-scope:check",
+    "security:critical-check": "node scripts/security-report-check.js && node scripts/security-phase2-check.js && node scripts/security-runtime-smoke.js && node scripts/security-phase3-check.js && node scripts/security-phase4-check.js",
+    "privacy:migrate-ai-logs": "node scripts/migrate-ai-logs-privacy.js",
+    "security:phase2-check": "node scripts/security-phase2-check.js",
+    "security:runtime-smoke": "node scripts/security-runtime-smoke.js",
+    "security:phase3-check": "node scripts/security-phase3-check.js",
+    "test:security:integration": "node --test tests/security.integration.test.js",
+    "security:all": "npm run check && npm run security:check && npm run test:security:integration && npm audit --audit-level=high",
+    "dast:staging": "bash scripts/dast-staging.sh",
+    "security:phase4-check": "node scripts/security-phase4-check.js",
+    "security:grandfathering-check": "node scripts/security-grandfathering-check.js",
+    "retail:migrate-tenancy": "node scripts/migrate-retail-tenancy.js",
+    "web-scope:check": "node scripts/web-staff-retail-check.js",
+    "test:retail-contract": "node --test tests/csrf-cookie.test.js tests/retail-payload-contract.test.js tests/retail-selector-defaults.test.js tests/retail-stability.test.js tests/retail-admin-pharmacy-selection.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -23,8 +36,14 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.3",
     "morgan": "^1.10.0",
-    "multer": "^2.0.2",
-    "nodemailer": "^6.9.16",
+    "multer": "^2.1.1",
+    "nodemailer": "^8.0.11",
+    "pdf-lib": "^1.17.1",
+    "redis": "^4.7.1",
+    "sharp": "^0.33.5",
     "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=18.18.0"
   }
 }

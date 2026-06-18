@@ -1,4 +1,6 @@
 import React from 'react';
+import { postJson } from '../lib/api';
+import { clearAuthStorage } from '../lib/storage';
 
 function getCopy() {
   let language = 'en';
@@ -31,15 +33,11 @@ export default class ErrorBoundary extends React.Component {
     console.error('ADWETY UI error:', error, info);
   }
 
-  clearAndReload = () => {
-    try {
-      window.localStorage.removeItem('adwety_dashboard_session');
-      window.sessionStorage.removeItem('adwety_dashboard_session');
-      window.localStorage.removeItem('adwety_theme');
-    } catch (_error) {
-      // ignore storage errors
-    }
-    window.location.href = '/login';
+  clearAndReload = async () => {
+    try { await postJson('/auth/logout', {}); } catch (_error) {}
+    clearAuthStorage();
+    try { window.localStorage.removeItem('adwety_theme'); } catch (_error) {}
+    window.location.replace('/login');
   };
 
   render() {
