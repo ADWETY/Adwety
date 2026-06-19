@@ -89,10 +89,6 @@ export default function SettingsPage() {
           {passwordError ? <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100">{passwordError}</p> : null}
           <button className="btn-primary" disabled={savingPassword}>{savingPassword ? t('app.loading') : t('actions.save')}</button>
         </form>
-        <div className="mt-5 sub-card p-4">
-          <p className="font-medium text-primary">{t('common.sessionStatus')}</p>
-          <p className="mt-2 text-sm text-muted">{t('common.activeApiSession')}</p>
-        </div>
       </section>
     </div>
   );

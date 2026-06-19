@@ -77,6 +77,35 @@ function useRetailCopy() {
   return { L: (key) => copy[language]?.[key] || copy.en[key] || key, language, B: (en, ar) => (language === 'ar' ? ar : en) };
 }
 
+
+function localizeWarehouseNameForCard(name, language) {
+  const text = String(name || '').trim();
+  if (!text || text === '—' || language !== 'ar') return text || '—';
+  if (/[\u0600-\u06FF]/.test(text)) return text;
+
+  const normalized = text.replace(/\s+/g, ' ');
+  const knownNames = {
+    'Main Pharmacist Pharmacy - Main Warehouse': 'صيدلية الصيدلي الرئيسية - المخزن الرئيسي',
+    'Main Pharmacy - Main Warehouse': 'الصيدلية الرئيسية - المخزن الرئيسي',
+    'Main Warehouse': 'المخزن الرئيسي',
+    'Branch Warehouse': 'مخزن الفرع',
+    'Branch Stock': 'مخزن الفرع',
+  };
+
+  if (knownNames[normalized]) return knownNames[normalized];
+
+  return normalized
+    .replace(/Main Pharmacist Pharmacy/gi, 'صيدلية الصيدلي الرئيسية')
+    .replace(/Main Pharmacy/gi, 'الصيدلية الرئيسية')
+    .replace(/Main Warehouse/gi, 'المخزن الرئيسي')
+    .replace(/Branch Warehouse/gi, 'مخزن الفرع')
+    .replace(/Branch Stock/gi, 'مخزن الفرع')
+    .replace(/Warehouse/gi, 'مخزن')
+    .replace(/Pharmacy/gi, 'صيدلية')
+    .replace(/Pharmacist/gi, 'الصيدلي')
+    .replace(/\s*-\s*/g, ' - ');
+}
+
 function normalizeSmartQuery(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -1289,7 +1318,21 @@ export function InventoryCountPage() {
 
   return <div className="space-y-6"><PageTitle icon={ClipboardCheck} title={B('Inventory Stocktake', 'جرد المخزون')} description={B('Load products by warehouse, enter counted quantity, calculate shortage/surplus and apply the stocktake results.', 'تحميل الأصناف حسب المخزن وإدخال الكمية المعدودة وحساب العجز/الزيادة وتطبيق نتيجة الجرد.')} />
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <StatCard icon={Warehouse} label={L('warehouse')} value={getWarehouseName(data, warehouseId)} hint={B('Click to choose a warehouse', 'اضغط لاختيار المخزن')} onClick={() => { setSummaryMode('all'); warehouseSelectRef.current?.querySelector('select')?.focus(); warehouseSelectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} />
+      <StatCard
+        icon={Warehouse}
+        label={L('warehouse')}
+        value={(
+          <span
+            className="block max-w-full whitespace-normal break-normal text-lg leading-7 [overflow-wrap:normal] [word-break:normal] hyphens-none md:text-xl"
+            dir={language === 'ar' ? 'rtl' : 'ltr'}
+            title={localizeWarehouseNameForCard(getWarehouseName(data, warehouseId), language)}
+          >
+            {localizeWarehouseNameForCard(getWarehouseName(data, warehouseId), language)}
+          </span>
+        )}
+        hint={B('Click to choose a warehouse', 'اضغط لاختيار المخزن')}
+        onClick={() => { setSummaryMode('all'); warehouseSelectRef.current?.querySelector('select')?.focus(); warehouseSelectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}
+      />
       <StatCard icon={Boxes} label={L('products')} value={allRows.length} hint={B('Show all counted products', 'عرض كل الأصناف')} active={summaryMode === 'all'} onClick={() => chooseSummary('all')} />
       <StatCard icon={ArrowLeftRight} label={B('Changed items', 'أصناف متغيرة')} value={changedRows.length} hint={B('Show shortage and surplus only', 'عرض العجز والزيادة فقط')} active={summaryMode === 'changed'} onClick={() => chooseSummary('changed')} />
       <StatCard icon={BarChart3} label={L('netDiff')} value={totalDifference} hint={totalDifference > 0 ? B('Show surplus items', 'عرض الأصناف الزائدة') : totalDifference < 0 ? B('Show shortage items', 'عرض الأصناف الناقصة') : B('No net difference', 'لا يوجد فرق صافي')} active={summaryMode === (totalDifference > 0 ? 'surplus' : totalDifference < 0 ? 'shortage' : 'changed')} onClick={() => chooseSummary(totalDifference > 0 ? 'surplus' : totalDifference < 0 ? 'shortage' : 'changed')} />
