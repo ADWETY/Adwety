@@ -5,9 +5,11 @@ const connectDatabase = require('./config/database');
 const { createApp } = require('./app');
 const { getClient, closeRedis } = require('./services/redis.service');
 const { ensureRetailIndexes } = require('./services/retail-indexes.service');
+const { ensureEnvUsersWhenUsersCollectionEmpty } = require('./services/dashboard-auto-seed.service');
 
 async function bootstrap() {
   await connectDatabase();
+  await ensureEnvUsersWhenUsersCollectionEmpty();
   await ensureRetailIndexes();
   await getClient();
   const app = createApp();
