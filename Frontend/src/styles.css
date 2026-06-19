@@ -1826,3 +1826,76 @@ body {
     margin-inline: auto !important;
   }
 }
+
+
+/* Retail dashboard recent sales invoices: exact card-fit sizing only for this table. */
+#retail-dashboard-recent-sales-card {
+  overflow: hidden;
+}
+
+#retail-dashboard-recent-sales-table-wrap {
+  width: calc(100% + 3rem);
+  margin-inline: -1.5rem;
+  overflow: hidden;
+}
+
+#retail-dashboard-recent-sales-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+  border-collapse: collapse;
+  font-size: clamp(0.72rem, 0.74vw, 0.875rem) !important;
+}
+
+#retail-dashboard-recent-sales-table th,
+#retail-dashboard-recent-sales-table td {
+  padding-inline: clamp(0.35rem, 0.55vw, 0.75rem) !important;
+  padding-block: 0.85rem !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  hyphens: none !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.35 !important;
+  vertical-align: middle !important;
+}
+
+#retail-dashboard-recent-sales-table th:nth-child(1),
+#retail-dashboard-recent-sales-table td:nth-child(1) { width: 13% !important; }
+
+#retail-dashboard-recent-sales-table th:nth-child(2),
+#retail-dashboard-recent-sales-table td:nth-child(2) { width: 20% !important; }
+
+#retail-dashboard-recent-sales-table th:nth-child(3),
+#retail-dashboard-recent-sales-table td:nth-child(3) { width: 35% !important; }
+
+#retail-dashboard-recent-sales-table th:nth-child(4),
+#retail-dashboard-recent-sales-table td:nth-child(4) { width: 10% !important; }
+
+#retail-dashboard-recent-sales-table th:nth-child(5),
+#retail-dashboard-recent-sales-table td:nth-child(5) { width: 10% !important; }
+
+#retail-dashboard-recent-sales-table th:nth-child(6),
+#retail-dashboard-recent-sales-table td:nth-child(6) { width: 12% !important; }
+
+#retail-dashboard-recent-sales-table td:nth-child(6) {
+  overflow: visible !important;
+}
+
+#retail-dashboard-recent-sales-table .badge {
+  max-width: 100%;
+  margin-inline: auto;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 1280px) {
+  #retail-dashboard-recent-sales-table {
+    font-size: 0.7rem !important;
+  }
+
+  #retail-dashboard-recent-sales-table th,
+  #retail-dashboard-recent-sales-table td {
+    padding-inline: 0.32rem !important;
+  }
+}

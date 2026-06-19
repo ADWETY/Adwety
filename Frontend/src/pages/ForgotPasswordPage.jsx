@@ -97,9 +97,16 @@ export default function ForgotPasswordPage() {
             </div>
             <div>
               <label className="label">{t('otp.code')}</label>
-              <div className="relative">
-                <ShieldCheck className="absolute start-4 top-3.5 h-4 w-4 text-soft" />
-                <input className="input ps-11 tracking-[0.35em]" value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="000000" />
+              <div className="input flex items-center gap-4 focus-within:border-cyan-500 focus-within:shadow-[0_0_0_3px_rgba(6,182,212,0.14)]">
+                <ShieldCheck className="h-5 w-5 shrink-0 text-soft" />
+                <input
+                  className="min-w-0 flex-1 bg-transparent p-0 text-right font-mono text-sm tracking-[0.35em] text-inherit outline-none placeholder:text-soft"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={otp}
+                  onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="000000"
+                />
               </div>
             </div>
             <div>
